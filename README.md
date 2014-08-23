@@ -8,10 +8,13 @@ The results can range from nonsensical to hilarious, depending on your friends.
 
 1. Install [Docker](https://docs.docker.com/installation/#installation) by following the instructions appropriate to your operating system.
 2. Build the image:
+
    ```bash
    sudo docker build -t fiction .
    ```
+
 3. Run the image:
+
    ```bash
    sudo docker run -d -p 9000:9000 --name fiction fiction
    ```
