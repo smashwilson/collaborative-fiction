@@ -6,7 +6,7 @@ CONTAINER_PORT=8080
 
 .PHONY: run image start-containers stop-containers
 
-collaborative-fiction:
+collaborative-fiction: *.go
 	go build .
 
 run: collaborative-fiction

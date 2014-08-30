@@ -75,7 +75,16 @@ func main() {
 		config.Root = config.Root + "/"
 	}
 
+	// Summarize the currently active configuration settings, without dumping secrets.
+	log.Println("Current configuration:")
+	log.Printf("  base url: %s\n", config.BaseURL)
+	log.Printf("  root: %s\n", config.Root)
+	log.Printf("  Google key [%t] secret [%t]\n", config.GoogleKey != "", config.GoogleSecret != "")
+	log.Printf("  GitHub key [%t] secret [%t]\n", config.GitHubKey != "", config.GitHubSecret != "")
+
 	registerAuthRoutes()
+
+	log.Println("Ready to serve.")
 
 	http.ListenAndServe(":8080", goweb.DefaultHttpHandler())
 }
