@@ -4,10 +4,13 @@ DOCKER_CONTAINER_NAME=fiction
 HOST_PORT=8080
 CONTAINER_PORT=8080
 
-.PHONY: image start-containers stop-containers
+.PHONY: run image start-containers stop-containers
 
-build:
+collaborative-fiction:
 	go build .
+
+run: collaborative-fiction
+	@bash -c "source .env; exec ./collaborative-fiction"
 
 image:
 	docker build --tag=$(DOCKER_IMAGE_NAME) $(ROOT_DIR)
