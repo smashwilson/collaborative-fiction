@@ -64,6 +64,10 @@ func main() {
 		log.Fatalf("Error reading configuration: %v", err)
 	}
 
+	if config.BaseURL == "" {
+		config.BaseURL = "http://localhost:8080/"
+	}
+
 	if !strings.HasSuffix(config.BaseURL, "/") {
 		config.BaseURL = config.BaseURL + "/"
 	}

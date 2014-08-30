@@ -16,6 +16,38 @@ import (
 
 var cookieGen *securecookie.SecureCookie
 
+const (
+	userCookieName = "user"
+	nameKey        = "name"
+	emailKey       = "email"
+	avatarKey      = "avatar"
+)
+
+func decodeCookieData(ctx context.Context, key string) (string, error) {
+	cookie, err := ctx.HttpRequest().Cookie(userCookieName)
+	if err != nil {
+		return "", err
+	}
+
+	cookieData := make(map[string]string)
+	err = cookieGen.Decode(userCookieName, cookie.Value, &cookieData)
+	if err != nil {
+		return "", err
+	}
+
+	return cookieData[key], nil
+}
+
+// UserName extracts the username from an authenticated session, or "" if no user is logged in.
+func UserName(ctx context.Context) (string, error) {
+	return decodeCookieData(ctx, nameKey)
+}
+
+// UserAvatar returns the URL to an authenticated user's avatar, or "" if no user is logged in.
+func UserAvatar(ctx context.Context) (string, error) {
+	return decodeCookieData(ctx, avatarKey)
+}
+
 func securityKey(filename string, length int) ([]byte, error) {
 	file, err := os.Open(filename)
 	switch {
@@ -104,18 +136,18 @@ func authCallbackHandler(ctx context.Context) error {
 	}
 
 	cookieData := map[string]string{
-		"name":   user.Name(),
-		"email":  user.Email(),
-		"avatar": user.AvatarURL(),
+		nameKey:   user.Name(),
+		emailKey:  user.Email(),
+		avatarKey: user.AvatarURL(),
 	}
-	encoded, err := cookieGen.Encode("user", cookieData)
+	encoded, err := cookieGen.Encode(userCookieName, cookieData)
 	if err != nil {
 		log.Printf("Unable to generate cookie: %v", err)
 		return goweb.Respond.WithStatus(ctx, http.StatusInternalServerError)
 	}
 
 	http.SetCookie(ctx.HttpResponseWriter(), &http.Cookie{
-		Name:  "user",
+		Name:  userCookieName,
 		Value: encoded,
 		Path:  config.Root,
 	})
