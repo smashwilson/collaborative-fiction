@@ -59,7 +59,7 @@ func snippetSubmitHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	err := envconfig.Process("collaborative-fiction", &config)
+	err := envconfig.Process("fiction", &config)
 	if err != nil {
 		log.Fatalf("Error reading configuration: %v", err)
 	}
