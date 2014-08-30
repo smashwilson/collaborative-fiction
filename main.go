@@ -4,14 +4,29 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
+
+	"github.com/kelseyhightower/envconfig"
+	"github.com/stretchr/goweb"
 )
+
+// Configuration contains application settings and secrets acquired from the environment.
+type Configuration struct {
+	BaseURL      string
+	GoogleKey    string
+	GoogleSecret string
+	GitHubKey    string
+	GitHubSecret string
+	Root         string
+}
 
 var (
 	ts = template.Must(template.ParseFiles(
 		"templates/login.html",
 		"templates/snippet-form.html",
 	))
-	story *Story
+	story  *Story
+	config Configuration
 )
 
 func useTemplate(w http.ResponseWriter, templateName string, data interface{}) {
@@ -21,6 +36,14 @@ func useTemplate(w http.ResponseWriter, templateName string, data interface{}) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func absURL(subpath string) string {
+	return config.BaseURL + config.Root + subpath
+}
+
+func path(subpath string) string {
+	return config.Root + subpath
 }
 
 func welcomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +59,19 @@ func snippetSubmitHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/", welcomeHandler)
-	http.ListenAndServe(":9000", nil)
+	err := envconfig.Process("collaborative-fiction", &config)
+	if err != nil {
+		log.Fatalf("Error reading configuration: %v", err)
+	}
+
+	if !strings.HasSuffix(config.BaseURL, "/") {
+		config.BaseURL = config.BaseURL + "/"
+	}
+	if !strings.HasSuffix(config.Root, "/") {
+		config.Root = config.Root + "/"
+	}
+
+	registerAuthRoutes()
+
+	http.ListenAndServe(":8080", goweb.DefaultHttpHandler())
 }
