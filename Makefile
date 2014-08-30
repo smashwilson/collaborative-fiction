@@ -7,7 +7,7 @@ CONTAINER_PORT=8080
 .PHONY: image start-containers stop-containers
 
 build:
-	go build $(ROOT_DIR)
+	go build .
 
 image:
 	docker build --tag=$(DOCKER_IMAGE_NAME) $(ROOT_DIR)
