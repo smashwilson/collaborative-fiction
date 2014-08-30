@@ -8,6 +8,7 @@ import (
 
 	"github.com/kelseyhightower/envconfig"
 	"github.com/stretchr/goweb"
+	"github.com/stretchr/goweb/context"
 )
 
 // Configuration contains application settings and secrets acquired from the environment.
@@ -24,38 +25,63 @@ var (
 	ts = template.Must(template.ParseFiles(
 		"templates/login.html",
 		"templates/snippet-form.html",
+		"templates/welcome.html",
 	))
 	story  *Story
 	config Configuration
 )
 
-func useTemplate(w http.ResponseWriter, templateName string, data interface{}) {
-	err := ts.ExecuteTemplate(w, templateName, data)
+func useTemplate(ctx context.Context, templateName string, data interface{}) error {
+	err := ts.ExecuteTemplate(ctx.HttpResponseWriter(), templateName, data)
 	if err != nil {
 		log.Printf("Unable to generate template: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return goweb.Respond.With(ctx, http.StatusInternalServerError, []byte(err.Error()))
 	}
+	return nil
 }
 
 func absURL(subpath string) string {
-	return config.BaseURL + config.Root + subpath
+	if config.Root == "" {
+		return strings.Join([]string{config.BaseURL, subpath}, "/")
+	}
+	return strings.Join([]string{config.BaseURL, config.Root, subpath}, "/")
 }
 
 func path(subpath string) string {
-	return config.Root + subpath
+	return strings.Join([]string{config.Root, subpath}, "/")
 }
 
-func welcomeHandler(w http.ResponseWriter, r *http.Request) {
-	useTemplate(w, "login.html", nil)
+func loginHandler(ctx context.Context) error {
+	type context struct {
+		Root string
+	}
+
+	c := context{Root: config.Root}
+	return useTemplate(ctx, "login.html", c)
 }
 
-func snippetFormHandler(w http.ResponseWriter, r *http.Request) {
-	useTemplate(w, "snippet-form.html", nil)
-}
+func welcomeHandler(ctx context.Context) error {
+	type context struct {
+		Root   string
+		Name   string
+		Email  string
+		Avatar string
+	}
 
-func snippetSubmitHandler(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/", 303)
+	must := func(str string, err error) string {
+		if err != nil {
+			return err.Error()
+		}
+		return str
+	}
+
+	c := context{
+		Root:   config.Root,
+		Name:   must(UserName(ctx)),
+		Email:  must(UserEmail(ctx)),
+		Avatar: must(UserAvatar(ctx)),
+	}
+	return useTemplate(ctx, "welcome.html", c)
 }
 
 func main() {
@@ -65,15 +91,11 @@ func main() {
 	}
 
 	if config.BaseURL == "" {
-		config.BaseURL = "http://localhost:8080/"
+		config.BaseURL = "http://localhost:8080"
 	}
 
-	if !strings.HasSuffix(config.BaseURL, "/") {
-		config.BaseURL = config.BaseURL + "/"
-	}
-	if !strings.HasSuffix(config.Root, "/") {
-		config.Root = config.Root + "/"
-	}
+	config.BaseURL = strings.TrimRight(config.BaseURL, "/")
+	config.Root = strings.TrimRight(config.Root, "/")
 
 	// Summarize the currently active configuration settings, without dumping secrets.
 	log.Println("Current configuration:")
@@ -82,7 +104,14 @@ func main() {
 	log.Printf("  Google key [%t] secret [%t]\n", config.GoogleKey != "", config.GoogleSecret != "")
 	log.Printf("  GitHub key [%t] secret [%t]\n", config.GitHubKey != "", config.GitHubSecret != "")
 
-	registerAuthRoutes()
+	err = registerAuthRoutes()
+	if err != nil {
+		log.Fatalf("Unable to register auth routes: %v", err)
+		return
+	}
+
+	goweb.Map("GET", path(""), loginHandler)
+	goweb.Map("GET", path("welcome"), welcomeHandler)
 
 	log.Println("Ready to serve.")
 

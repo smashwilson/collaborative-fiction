@@ -43,6 +43,11 @@ func UserName(ctx context.Context) (string, error) {
 	return decodeCookieData(ctx, nameKey)
 }
 
+// UserEmail extracts the email from an authenticated session, or "" if no user is logged in.
+func UserEmail(ctx context.Context) (string, error) {
+	return decodeCookieData(ctx, emailKey)
+}
+
 // UserAvatar returns the URL to an authenticated user's avatar, or "" if no user is logged in.
 func UserAvatar(ctx context.Context) (string, error) {
 	return decodeCookieData(ctx, avatarKey)
@@ -51,7 +56,7 @@ func UserAvatar(ctx context.Context) (string, error) {
 func securityKey(filename string, length int) ([]byte, error) {
 	file, err := os.Open(filename)
 	switch {
-	case err != nil:
+	case err == nil:
 		return ioutil.ReadAll(file)
 	case os.IsNotExist(err):
 		secret := securecookie.GenerateRandomKey(length)
@@ -111,6 +116,7 @@ func authLoginHandler(ctx context.Context) error {
 		return goweb.Respond.WithStatus(ctx, http.StatusInternalServerError)
 	}
 
+	log.Printf("Redirecting to: [%s]", authURL)
 	return goweb.Respond.WithRedirect(ctx, authURL)
 }
 
@@ -149,8 +155,8 @@ func authCallbackHandler(ctx context.Context) error {
 	http.SetCookie(ctx.HttpResponseWriter(), &http.Cookie{
 		Name:  userCookieName,
 		Value: encoded,
-		Path:  config.Root,
+		Path:  "/",
 	})
 
-	return goweb.Respond.WithRedirect(ctx, config.Root)
+	return goweb.Respond.WithRedirect(ctx, path("welcome"))
 }
