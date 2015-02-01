@@ -10,3 +10,6 @@ name = "collabfict"
 
 [dependencies.iron]
 version = "*"
+
+[dependencies.router]
+version = "*"
