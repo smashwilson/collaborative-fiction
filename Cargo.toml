@@ -7,3 +7,6 @@ authors = [ "Ash Wilson <smashwilson@gmail.com>" ]
 [[bin]]
 
 name = "collabfict"
+
+[dependencies.iron]
+version = "*"
