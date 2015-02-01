@@ -1,0 +1,9 @@
+[package]
+
+name = "collabfict"
+version = "0.0.1"
+authors = [ "Ash Wilson <smashwilson@gmail.com>" ]
+
+[[bin]]
+
+name = "collabfict"
