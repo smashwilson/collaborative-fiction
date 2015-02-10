@@ -13,6 +13,7 @@ use iron::typemap::Key;
 use router::Router;
 use persistent::Write;
 use rand::{OsRng, Rng};
+use hyper::Client;
 
 /// Initial size of the "valid state parameter" pool.
 const INIT_STATE_CAPACITY: usize = 100;
@@ -68,7 +69,11 @@ impl Provider {
             callback_uri: callback_uri,
         };
 
-        let callback_handler = CallbackHandler;
+        let callback_handler = CallbackHandler{
+            client_id: self.client_id.clone(),
+            client_secret: self.client_secret.clone(),
+            token_uri: self.token_uri.clone(),
+        };
 
         router.get(request_glob, request_handler);
         router.get(callback_glob, callback_handler);
@@ -141,7 +146,11 @@ impl Handler for RequestHandler {
 /// A Handler that accepts the redirection back from the provider after authentication has succeeded
 /// or failed. It performs a POST back to the provider to acquire a token based on the temporary `code`
 /// and `state`.
-struct CallbackHandler;
+struct CallbackHandler {
+    client_id: String,
+    client_secret: String,
+    token_uri: Url,
+}
 
 impl Handler for CallbackHandler {
 
@@ -152,7 +161,7 @@ impl Handler for CallbackHandler {
         let result = extract_callback_params(req).and_then(|(code, state)| {
             validate_state(&mut *shared, &state).map(|_| { code })
         }).and_then(|code| {
-            generate_token(code)
+            generate_token(&self, code)
         });
 
         match result {
@@ -213,6 +222,17 @@ fn validate_state(shared: &mut Shared, state: &str) -> Result<(), &'static str> 
     }
 }
 
-fn generate_token(code: String) -> Result<String, &'static str> {
-    Ok("fake_token".to_string())
+fn generate_token(handler: &CallbackHandler, code: String) -> Result<String, &'static str> {
+    let mut client = Client::new();
+    let u: &str = &format!("{}", handler.token_uri);
+    let b: &str = &format!("client_id={}&client_secret={}&code={}",
+        &handler.client_id, &handler.client_secret, &code
+    );
+
+    debug!("Attempting to acquire token from: [{}]", u);
+
+    match client.post(u).body(b).send() {
+        Ok(mut response) => response.read_to_string().map_err(|_| "Unable to read response"),
+        Err(_) => Err("Unable to acquire a token for you."),
+    }
 }

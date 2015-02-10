@@ -1,5 +1,5 @@
 #![deny(deprecated,stable_features,unused_mut)]
-#![feature(env,core)]
+#![feature(env,core,io)]
 
 #[macro_use] extern crate log;
 extern crate env_logger;
@@ -7,6 +7,7 @@ extern crate iron;
 extern crate router;
 extern crate persistent;
 extern crate rand;
+extern crate hyper;
 
 use std::env;
 
