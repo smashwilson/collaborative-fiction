@@ -125,16 +125,15 @@ impl Handler for RequestHandler {
         let mut shared = mutex.lock().unwrap();
         let state = shared.generate_state();
 
-        debug!("Redirecting to {} with state [{}].", self.callback_uri, state);
-
         let mut u = self.request_uri.clone();
-
         u.query = Some(format!(
             "client_id={}&redirect_uri={}&scope=user:email&state={}",
             &self.client_id, self.callback_uri, &state
         ));
 
-        Ok(Response::new().set(Redirect(u)))
+        debug!("Redirecting to [{}].", u);
+
+        Ok(Response::with((status::Found, Redirect(u))))
     }
 
 }
