@@ -160,7 +160,7 @@ impl Handler for CallbackHandler {
                 debug!("OAuth flow completed. Acquired token: [{}]", token);
 
                 let output = format!("Callback reached! Your token is [{}].", token);
-                Ok(Response::with((status::Ok, "Callback reached!")))
+                Ok(Response::with((status::Ok, output)))
             },
             Err(message) => {
                 warn!("OAuth flow problem: {}", message);
