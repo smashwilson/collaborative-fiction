@@ -4,9 +4,6 @@ extern crate router;
 extern crate persistent;
 
 use std::collections::HashSet;
-use std::rand::{Rng, OsRng};
-use std::old_io::IoError;
-use std::sync::{Arc, Mutex};
 
 use iron::prelude::*;
 use iron::status;
@@ -15,6 +12,7 @@ use iron::modifiers::Redirect;
 use iron::typemap::Key;
 use router::Router;
 use persistent::Write;
+use rand::{OsRng, Rng};
 
 /// Initial size of the "valid state parameter" pool.
 const INIT_STATE_CAPACITY: usize = 100;
