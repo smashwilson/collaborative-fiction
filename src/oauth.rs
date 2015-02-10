@@ -146,9 +146,67 @@ struct CallbackHandler;
 impl Handler for CallbackHandler {
 
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        debug!("GitHub callback reached. :sparkles: query = <{:?}>", req.url.query);
+        let mutex = req.get::<Write<Provider>>().unwrap();
+        let mut shared = mutex.lock().unwrap();
 
-        Ok(Response::with((status::Ok, "Callback reached!")))
+        let result = extract_callback_params(req).and_then(|(code, state)| {
+            validate_state(&mut *shared, state).map(|_| { code })
+        }).and_then(|code| {
+            generate_token(code)
+        });
+
+        match result {
+            Ok(token) => {
+                debug!("OAuth flow completed. Acquired token: [{}]", token);
+
+                let output = format!("Callback reached! Your token is [{}].", token);
+                Ok(Response::with((status::Ok, "Callback reached!")))
+            },
+            Err(message) => {
+                warn!("OAuth flow problem: {}", message);
+
+                Ok(Response::with((status::BadRequest, message)))
+            },
+        }
     }
 
+}
+
+/// Extract the "code" and "state" query parameters from the callback request. Fail if either are
+/// not present.
+fn extract_callback_params(req: &Request) -> Result<(String, String), &'static str> {
+    let u = req.url.clone().into_generic_url();
+
+    let mut codeOp: Option<String> = None;
+    let mut stateOp: Option<String> = None;
+
+    match u.query_pairs() {
+        Some(pairs) => {
+            for pair in pairs.iter() {
+                let (ref key, ref value) = *pair;
+                match key.as_slice() {
+                    "code" => codeOp = Some(value.clone()),
+                    "state" => stateOp = Some(value.clone()),
+                    _ => warn!("Unrecognized callback parameter: [{}]", &key),
+                }
+            }
+        },
+        None => {
+            warn!("Callback request missing any query parameters: [{}]", u);
+            return Err("Callback missing query parameters");
+        },
+    };
+
+    match (codeOp, stateOp) {
+        (Some(code), Some(state)) => Ok((code, state)),
+        _ => Err("Callback request missing required query parameters"),
+    }
+}
+
+fn validate_state(shared: &mut Shared, state: String) -> Result<(), &'static str> {
+    Ok(())
+}
+
+fn generate_token(code: String) -> Result<String, &'static str> {
+    Ok("fake_token".to_string())
 }
