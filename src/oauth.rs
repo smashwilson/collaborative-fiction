@@ -58,7 +58,7 @@ impl Provider {
         let request_glob = format!("{}/{}", root, &self.name);
         let callback_glob = format!("{}/{}/callback", root, &self.name);
 
-        let mut callback_uri = Url::parse(&format!(
+        let callback_uri = Url::parse(&format!(
             "http://localhost:3000/{}", &callback_glob
         )).unwrap();
 
