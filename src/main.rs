@@ -25,7 +25,7 @@ fn health_check(_: &mut Request) -> IronResult<Response> {
 fn main() {
     env_logger::init().unwrap();
 
-    let gh_client_id = env::var_string("FICTION_GITHUBKEY").unwrap();
+    let gh_client_id = env::var_string("FICTION_GITHUBID").unwrap();
     let gh_client_key = env::var_string("FICTION_GITHUBSECRET").unwrap();
     let provider = oauth::Provider::github(gh_client_id, gh_client_key);
 
