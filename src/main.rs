@@ -1,3 +1,5 @@
+#![deny(deprecated,stable_features,unstable_features,unused_mut)]
+
 #[macro_use] extern crate log;
 extern crate env_logger;
 extern crate iron;
