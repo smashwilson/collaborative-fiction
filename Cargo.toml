@@ -9,7 +9,12 @@ authors = [ "Ash Wilson <smashwilson@gmail.com>" ]
 name = "collabfict"
 
 [dependencies]
+plugin = "=0.2.0"
+
 log = "0.2.1"
 env_logger = "0.2.1"
 iron = "0.1.5"
 router = "0.0.8"
+persistent = "0.0.2"
+rand = "0.1.2"
+hyper = "0.1.11"
