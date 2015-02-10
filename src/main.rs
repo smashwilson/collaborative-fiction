@@ -1,4 +1,5 @@
-#![deny(deprecated,stable_features,unstable_features,unused_mut)]
+#![deny(deprecated,stable_features,unused_mut)]
+#![feature(env)]
 
 #[macro_use] extern crate log;
 extern crate env_logger;
@@ -7,7 +8,7 @@ extern crate router;
 extern crate persistent;
 extern crate rand;
 
-use std::os;
+use std::env;
 
 use iron::prelude::*;
 use iron::status;
@@ -24,8 +25,8 @@ fn health_check(_: &mut Request) -> IronResult<Response> {
 fn main() {
     env_logger::init().unwrap();
 
-    let gh_client_id = os::getenv("FICTION_GITHUBKEY").unwrap();
-    let gh_client_key = os::getenv("FICTION_GITHUBSECRET").unwrap();
+    let gh_client_id = env::var_string("FICTION_GITHUBKEY").unwrap();
+    let gh_client_key = env::var_string("FICTION_GITHUBSECRET").unwrap();
     let provider = oauth::Provider::github(gh_client_id, gh_client_key);
 
     let mut router = Router::new();
