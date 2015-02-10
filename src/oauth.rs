@@ -150,7 +150,7 @@ impl Handler for CallbackHandler {
         let mut shared = mutex.lock().unwrap();
 
         let result = extract_callback_params(req).and_then(|(code, state)| {
-            validate_state(&mut *shared, state).map(|_| { code })
+            validate_state(&mut *shared, &state).map(|_| { code })
         }).and_then(|code| {
             generate_token(code)
         });
@@ -177,16 +177,18 @@ impl Handler for CallbackHandler {
 fn extract_callback_params(req: &Request) -> Result<(String, String), &'static str> {
     let u = req.url.clone().into_generic_url();
 
-    let mut codeOp: Option<String> = None;
-    let mut stateOp: Option<String> = None;
+    let mut code_op: Option<String> = None;
+    let mut state_op: Option<String> = None;
 
     match u.query_pairs() {
         Some(pairs) => {
             for pair in pairs.iter() {
                 let (ref key, ref value) = *pair;
-                match key.as_slice() {
-                    "code" => codeOp = Some(value.clone()),
-                    "state" => stateOp = Some(value.clone()),
+                let key_str: &str = key;
+
+                match key_str {
+                    "code" => code_op = Some(value.clone()),
+                    "state" => state_op = Some(value.clone()),
                     _ => warn!("Unrecognized callback parameter: [{}]", &key),
                 }
             }
@@ -197,14 +199,18 @@ fn extract_callback_params(req: &Request) -> Result<(String, String), &'static s
         },
     };
 
-    match (codeOp, stateOp) {
+    match (code_op, state_op) {
         (Some(code), Some(state)) => Ok((code, state)),
         _ => Err("Callback request missing required query parameters"),
     }
 }
 
-fn validate_state(shared: &mut Shared, state: String) -> Result<(), &'static str> {
-    Ok(())
+fn validate_state(shared: &mut Shared, state: &str) -> Result<(), &'static str> {
+    if shared.validate_state(state) {
+        Ok(())
+    } else {
+        Err("Unfamiliar state encountered. Danger: this could be an XSS attack!")
+    }
 }
 
 fn generate_token(code: String) -> Result<String, &'static str> {
