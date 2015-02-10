@@ -2,8 +2,7 @@
 extern crate env_logger;
 extern crate iron;
 extern crate router;
-
-use oauth::OAuthProvider;
+extern crate persistent;
 
 use std::os;
 use std::rand::{Rng, OsRng};
@@ -23,18 +22,17 @@ fn health_check(_: &mut Request) -> IronResult<Response> {
 fn main() {
     env_logger::init().unwrap();
 
-    let rng = OsRng::new().unwrap();
-
     let gh_client_id = os::getenv("FICTION_GITHUBKEY").unwrap();
     let gh_client_key = os::getenv("FICTION_GITHUBSECRET").unwrap();
-    let provider = oauth::github::Provider::new(gh_client_id, gh_client_key, rng);
+    let provider = oauth::Provider::github(gh_client_id, gh_client_key);
 
     let mut router = Router::new();
-
     router.get("/", health_check);
+    provider.route("auth", &mut router);
 
-    router = *provider.register("auth", &mut router);
+    let mut chain = Chain::new(router);
+    oauth::link(&mut chain);
 
     info!("Launching collaborative fiction API server on localhost:3000.");
-    Iron::new(router).listen("localhost:3000").unwrap();
+    Iron::new(chain).listen("localhost:3000").unwrap();
 }
