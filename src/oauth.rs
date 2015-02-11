@@ -14,6 +14,9 @@ use router::Router;
 use persistent::Write;
 use rand::{OsRng, Rng};
 use hyper::Client;
+use hyper::header::{Accept, qitem};
+use hyper::mime::{Mime, TopLevel, SubLevel};
+use rustc_serialize::json;
 
 /// Initial size of the "valid state parameter" pool.
 const INIT_STATE_CAPACITY: usize = 100;
@@ -231,8 +234,17 @@ fn generate_token(handler: &CallbackHandler, code: String) -> Result<String, &'s
 
     debug!("Attempting to acquire token from: [{}]", u);
 
-    match client.post(u).body(b).send() {
-        Ok(mut response) => response.read_to_string().map_err(|_| "Unable to read response"),
-        Err(_) => Err("Unable to acquire a token for you."),
-    }
+    let mut req = client.post(u).body(b);
+    req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
+
+    req.send()
+        .map_err(|_| "Unable to acquire a token for you.")
+        .and_then(|mut response| response.read_to_string().map_err(|_| "Unable to read response"))
+        .and_then(|body| json::decode(&body).map_err(|_| "Unable to parse body as JSON"))
+        .map(|token_resp: TokenResponse| token_resp.access_token)
+}
+
+#[derive(RustcDecodable)]
+struct TokenResponse {
+    access_token: String,
 }

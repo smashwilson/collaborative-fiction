@@ -8,6 +8,7 @@ extern crate router;
 extern crate persistent;
 extern crate rand;
 extern crate hyper;
+extern crate "rustc-serialize" as rustc_serialize;
 
 use std::env;
 
