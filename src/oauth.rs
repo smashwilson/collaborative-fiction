@@ -14,6 +14,8 @@ use router::Router;
 use persistent::Write;
 use rand::{OsRng, Rng};
 use hyper::Client;
+use hyper::header::{Accept, qitem};
+use hyper::mime::{Mime, TopLevel, SubLevel};
 
 /// Initial size of the "valid state parameter" pool.
 const INIT_STATE_CAPACITY: usize = 100;
@@ -231,7 +233,10 @@ fn generate_token(handler: &CallbackHandler, code: String) -> Result<String, &'s
 
     debug!("Attempting to acquire token from: [{}]", u);
 
-    match client.post(u).body(b).send() {
+    let mut req = client.post(u).body(b);
+    req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
+
+    match req.send() {
         Ok(mut response) => response.read_to_string().map_err(|_| "Unable to read response"),
         Err(_) => Err("Unable to acquire a token for you."),
     }
