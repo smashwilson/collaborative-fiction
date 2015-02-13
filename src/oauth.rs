@@ -80,9 +80,6 @@ pub trait Provider : Key + Send + Sync + Clone {
     /// Access the common Provider options.
     fn options(&self) -> &Options;
 
-    /// Create the middleware that will appropriately register `Shared` state for this provider.
-    fn shared_middleware(&self) -> Write<GitHub>;
-
     /// Access the `Mutex` containing the persistent state for this provider from a specific
     /// request. Panics if the persistence middleware has not been installed.
     fn shared_mutex(&self, req: &mut Request) -> Arc<Mutex<Shared>>;
@@ -90,6 +87,9 @@ pub trait Provider : Key + Send + Sync + Clone {
     /// Specify the scopes to request from this provider during the authorization process, in the
     /// format expected by the provider.
     fn scopes(&self) -> &'static str;
+
+    /// Create the middleware that will appropriately register `Shared` state for this provider.
+    fn link(&self, chain: &mut Chain);
 
     /// Generate the route for the `request_handler`.
     fn request_glob(&self) -> String {
@@ -226,12 +226,6 @@ pub trait Provider : Key + Send + Sync + Clone {
         router.get(self.callback_glob(), CallbackHandler{provider: self.clone()});
     }
 
-    /// Link supporting middleware into the chain to supply common shared state for all OAuth
-    /// providers.
-    fn link(&self, chain: &mut Chain) {
-        chain.link_before(self.shared_middleware());
-    }
-
 }
 
 struct RequestHandler<P: Provider> {
@@ -293,15 +287,15 @@ impl Provider for GitHub {
         &self.options
     }
 
-    fn shared_middleware(&self) -> Write<GitHub> {
-        Write::<GitHub>::one(Shared::new())
-    }
-
     fn shared_mutex(&self, req: &mut Request) -> Arc<Mutex<Shared>> {
         req.get::<Write<GitHub>>().unwrap()
     }
 
     fn scopes(&self) -> &'static str {
         "user:email"
+    }
+
+    fn link(&self, chain: &mut Chain) {
+        chain.link_before(Write::<GitHub>::one(Shared::new()));
     }
 }
