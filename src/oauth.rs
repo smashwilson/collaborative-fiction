@@ -4,22 +4,22 @@ extern crate router;
 extern crate persistent;
 
 use std::collections::HashSet;
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 
 use iron::prelude::*;
 use iron::status;
 use iron::Url as IronUrl;
-use iron::{Handler, BeforeMiddleware};
+use iron::Handler;
 use iron::modifiers::Redirect;
 use iron::typemap::Key;
 use router::Router;
 use persistent::Write;
 use rand::{OsRng, Rng};
 use hyper::Client;
+use hyper::Url as HyperUrl;
 use hyper::header::{Accept, qitem};
 use hyper::mime::{Mime, TopLevel, SubLevel};
 use rustc_serialize::json;
-use url::Url as ClientUrl;
 
 /// Initial size of the "valid state parameter" pool.
 const INIT_STATE_CAPACITY: usize = 100;
@@ -35,7 +35,7 @@ struct Options {
     client_id: String,
     client_secret: String,
     request_uri: IronUrl,
-    token_uri: ClientUrl,
+    token_uri: HyperUrl,
 }
 
 /// Mutable state to be shared among the request handlers installed by a specific `Provider`.
@@ -81,11 +81,11 @@ pub trait Provider : Key + Send + Sync + Clone {
     fn options(&self) -> &Options;
 
     /// Create the middleware that will appropriately register `Shared` state for this provider.
-    fn shared_middleware(&self) -> Write<Self>;
+    fn shared_middleware(&self) -> Write<GitHub>;
 
     /// Access the `Mutex` containing the persistent state for this provider from a specific
     /// request. Panics if the persistence middleware has not been installed.
-    fn shared_mutex(&self, req: &mut Request) -> Mutex<Shared>;
+    fn shared_mutex(&self, req: &mut Request) -> Arc<Mutex<Shared>>;
 
     /// Specify the scopes to request from this provider during the authorization process, in the
     /// format expected by the provider.
@@ -94,18 +94,18 @@ pub trait Provider : Key + Send + Sync + Clone {
     /// Generate the route for the `request_handler`.
     fn request_glob(&self) -> String {
         let o = self.options();
-        format!("{}/{}", o.root, o.name);
+        format!("{}/{}", o.root, o.name)
     }
 
     /// Generate the route for the `callback_handler`.
     fn callback_glob(&self) -> String {
         let o = self.options();
-        format!("{}/{}/callback", o.root, o.name);
+        format!("{}/{}/callback", o.root, o.name)
     }
 
     /// Generate the full URL to the `callback_handler`.
     fn callback_url(&self) -> IronUrl {
-        IronUrl::parse(&format!("http://localhost:3000/{}", &self.callback_glob())).unwrap();
+        IronUrl::parse(&format!("http://localhost:3000/{}", &self.callback_glob())).unwrap()
     }
 
     /// *Phase 1:* Redirect to the OAuth provider's authorization page with a randomly generated
@@ -113,7 +113,8 @@ pub trait Provider : Key + Send + Sync + Clone {
     fn request_handler(&self, req: &mut Request) -> IronResult<Response> {
         let o = self.options();
 
-        let mut shared = self.shared_mutex(req).lock().unwrap();
+        let mutex = self.shared_mutex(req);
+        let mut shared = mutex.lock().unwrap();
         let state = shared.generate_state();
 
         let mut u = o.request_uri.clone();
@@ -131,7 +132,8 @@ pub trait Provider : Key + Send + Sync + Clone {
     /// exchange the `code` for an access token. Use the access token with the provider's API
     /// to locate the authenticated user's username and email address.
     fn callback_handler(&self, req: &mut Request) -> IronResult<Response> {
-        let mut shared = self.shared_mutex(req).lock().unwrap();
+        let mutex = self.shared_mutex(req);
+        let mut shared = mutex.lock().unwrap();
 
         let result = self.extract_callback_params(req)
             .and_then(|(code, state)| self.validate_state(&mut *shared, &state).map(|_| { code }))
@@ -205,7 +207,8 @@ pub trait Provider : Key + Send + Sync + Clone {
 
         debug!("Attempting to acquire a {} access token from: [{}]", o.name, o.token_uri);
 
-        let mut req = Client::new().post(o.token_uri).body(b);
+        let mut client = Client::new();
+        let mut req = client.post(o.token_uri.clone()).body(b);
         req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
 
         req.send()
@@ -218,14 +221,14 @@ pub trait Provider : Key + Send + Sync + Clone {
     /// Register the routes necessary to support this Provider. Usually, this will involve a
     /// *redirect route*, which will redirect to an external authorization page, and a *callback
     /// route*, to which the provider is expected to return control with a redirect back.
-    pub fn route(&self, router: &mut Router) {
+    fn route(&self, router: &mut Router) {
         router.get(self.request_glob(), RequestHandler{provider: self.clone()});
         // router.get(self.callback_glob(), move |r| cself.callback_handler(r));
     }
 
     /// Link supporting middleware into the chain to supply common shared state for all OAuth
     /// providers.
-    pub fn link(&self, chain: &mut Chain) {
+    fn link(&self, chain: &mut Chain) {
         chain.link_before(self.shared_middleware());
     }
 
@@ -259,7 +262,7 @@ impl GitHub {
                 client_id: id,
                 client_secret: secret,
                 request_uri: IronUrl::parse("https://github.com/login/oauth/authorize").unwrap(),
-                token_uri: ClientUrl::parse("https://github.com/login/oauth/access_token").unwrap(),
+                token_uri: HyperUrl::parse("https://github.com/login/oauth/access_token").unwrap(),
             }
         }
     }
@@ -282,8 +285,8 @@ impl Provider for GitHub {
         Write::<GitHub>::one(Shared::new())
     }
 
-    fn shared_mutex(&self, req: &mut Request) -> Mutex<Shared> {
-        *req.get::<Write<GitHub>>().unwrap()
+    fn shared_mutex(&self, req: &mut Request) -> Arc<Mutex<Shared>> {
+        req.get::<Write<GitHub>>().unwrap()
     }
 
     fn scopes(&self) -> &'static str {
