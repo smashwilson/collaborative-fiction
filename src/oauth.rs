@@ -28,6 +28,7 @@ const INIT_STATE_CAPACITY: usize = 100;
 const STATE_LEN: usize = 20;
 
 /// Configuration options that are common to all supported OAuth providers.
+#[derive(Clone)]
 struct Options {
     name: &'static str,
     root: &'static str,
@@ -74,7 +75,7 @@ struct TokenResponse {
 }
 
 /// Common behavior and general flow shared among OAuth providers.
-pub trait Provider : Key {
+pub trait Provider : Key + Send + Sync + Clone {
 
     /// Access the common Provider options.
     fn options(&self) -> &Options;
@@ -218,10 +219,8 @@ pub trait Provider : Key {
     /// *redirect route*, which will redirect to an external authorization page, and a *callback
     /// route*, to which the provider is expected to return control with a redirect back.
     pub fn route(&self, router: &mut Router) {
-        let (rself, cself) = (self.clone(), self.clone());
-
-        router.get(self.request_glob(), move |r| rself.request_handler(r));
-        router.get(self.callback_glob(), move |r| cself.callback_handler(r));
+        router.get(self.request_glob(), RequestHandler{provider: self.clone()});
+        // router.get(self.callback_glob(), move |r| cself.callback_handler(r));
     }
 
     /// Link supporting middleware into the chain to supply common shared state for all OAuth
@@ -232,7 +231,20 @@ pub trait Provider : Key {
 
 }
 
+struct RequestHandler<P: Provider> {
+    provider: P
+}
+
+impl <P: Provider> Handler for RequestHandler<P> {
+
+    fn handle(&self, r: &mut Request) -> IronResult<Response> {
+        self.provider.request_handler(r)
+    }
+
+}
+
 /// Implement OAuth for GitHub.
+#[derive(Clone)]
 pub struct GitHub {
     options: Options,
 }
