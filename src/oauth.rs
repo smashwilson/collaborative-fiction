@@ -4,16 +4,19 @@ extern crate router;
 extern crate persistent;
 
 use std::collections::HashSet;
+use std::sync::{Mutex, Arc};
 
 use iron::prelude::*;
 use iron::status;
-use iron::{Url, Handler};
+use iron::Url as IronUrl;
+use iron::Handler;
 use iron::modifiers::Redirect;
 use iron::typemap::Key;
 use router::Router;
 use persistent::Write;
 use rand::{OsRng, Rng};
 use hyper::Client;
+use hyper::Url as HyperUrl;
 use hyper::header::{Accept, qitem};
 use hyper::mime::{Mime, TopLevel, SubLevel};
 use rustc_serialize::json;
@@ -24,66 +27,18 @@ const INIT_STATE_CAPACITY: usize = 100;
 /// Length of the "state" parameter used to defeat XSS hijacking.
 const STATE_LEN: usize = 20;
 
-pub struct Provider {
+/// Configuration options that are common to all supported OAuth providers.
+#[derive(Clone)]
+struct Options {
     name: &'static str,
-    request_uri: Url,
-    token_uri: Url,
-
+    root: &'static str,
     client_id: String,
-    client_secret: String
+    client_secret: String,
+    request_uri: IronUrl,
+    token_uri: HyperUrl,
 }
 
-impl Key for Provider { type Value = Shared; }
-
-impl Provider {
-
-    fn new(name: &'static str, request_uri: Url, token_uri: Url, id: String, secret: String) -> Provider {
-        Provider{
-            name: name,
-            request_uri: request_uri,
-            token_uri: token_uri,
-            client_id: id,
-            client_secret: secret,
-        }
-    }
-
-    /// Allocate a Provider configured to authenticate against GitHub's OAuth2 API.
-    pub fn github(id: String, secret: String) -> Provider {
-        let request = Url::parse("https://github.com/login/oauth/authorize").unwrap();
-        let token = Url::parse("https://github.com/login/oauth/access_token").unwrap();
-
-        Provider::new("github", request, token, id, secret)
-    }
-
-    /// Register the routes necessary to support this provider. Usually, this will involve a
-    /// *redirect route*, which will redirect to an external authorization page, and a *callback
-    /// route*, to which the provider is expected to return control with a redirect back.
-    pub fn route(&self, root: &str, router: &mut Router) {
-        let request_glob = format!("{}/{}", root, &self.name);
-        let callback_glob = format!("{}/{}/callback", root, &self.name);
-
-        let callback_uri = Url::parse(&format!(
-            "http://localhost:3000/{}", &callback_glob
-        )).unwrap();
-
-        let request_handler = RequestHandler{
-            client_id: self.client_id.clone(),
-            request_uri: self.request_uri.clone(),
-            callback_uri: callback_uri,
-        };
-
-        let callback_handler = CallbackHandler{
-            client_id: self.client_id.clone(),
-            client_secret: self.client_secret.clone(),
-            token_uri: self.token_uri.clone(),
-        };
-
-        router.get(request_glob, request_handler);
-        router.get(callback_glob, callback_handler);
-    }
-
-}
-
+/// Mutable state to be shared among the request handlers installed by a specific `Provider`.
 struct Shared {
     rng: OsRng,
     valid_states: HashSet<String>,
@@ -99,7 +54,7 @@ impl Shared {
         }
     }
 
-    /// Generate an unguessable random string for use as a `state` parameter. Remember it as valid
+    /// Generate an unguessable random string for use as a `state` parameter. Remember it as valid.
     fn generate_state(&mut self) -> String {
         let state: String = self.rng.gen_ascii_chars().take(STATE_LEN).collect();
         self.valid_states.insert(state.clone());
@@ -113,59 +68,76 @@ impl Shared {
 
 }
 
-/// Link supporting middleware into the chain to supply common shared state for all OAuth
-/// providers.
-pub fn link(chain: &mut Chain) {
-    chain.link_before(Write::<Provider>::one(Shared::new()));
+/// Extract an access token from an OAuth provider's JSON response.
+#[derive(RustcDecodable)]
+struct TokenResponse {
+    access_token: String,
 }
 
-/// A Handler that redirects to the provider for authorization.
-struct RequestHandler {
-    client_id: String,
-    request_uri: Url,
-    callback_uri: Url,
-}
+/// Common behavior and general flow shared among OAuth providers.
+pub trait Provider : Key + Send + Sync + Clone {
 
-impl Handler for RequestHandler {
+    /// Access the common Provider options.
+    fn options(&self) -> &Options;
 
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        let mutex = req.get::<Write<Provider>>().unwrap();
+    /// Access the `Mutex` containing the persistent state for this provider from a specific
+    /// request. Panics if the persistence middleware has not been installed.
+    fn shared_mutex(&self, req: &mut Request) -> Arc<Mutex<Shared>>;
+
+    /// Specify the scopes to request from this provider during the authorization process, in the
+    /// format expected by the provider.
+    fn scopes(&self) -> &'static str;
+
+    /// Create the middleware that will appropriately register `Shared` state for this provider.
+    fn link(&self, chain: &mut Chain);
+
+    /// Generate the route for the `request_handler`.
+    fn request_glob(&self) -> String {
+        let o = self.options();
+        format!("{}/{}", o.root, o.name)
+    }
+
+    /// Generate the route for the `callback_handler`.
+    fn callback_glob(&self) -> String {
+        let o = self.options();
+        format!("{}/{}/callback", o.root, o.name)
+    }
+
+    /// Generate the full URL to the `callback_handler`.
+    fn callback_url(&self) -> IronUrl {
+        IronUrl::parse(&format!("http://localhost:3000/{}", &self.callback_glob())).unwrap()
+    }
+
+    /// *Phase 1:* Redirect to the OAuth provider's authorization page with a randomly generated
+    /// `state` parameter.
+    fn request_handler(&self, req: &mut Request) -> IronResult<Response> {
+        let o = self.options();
+
+        let mutex = self.shared_mutex(req);
         let mut shared = mutex.lock().unwrap();
         let state = shared.generate_state();
 
-        let mut u = self.request_uri.clone();
+        let mut u = o.request_uri.clone();
         u.query = Some(format!(
-            "client_id={}&redirect_uri={}&scope=user:email&state={}",
-            &self.client_id, self.callback_uri, &state
+            "client_id={}&redirect_uri={}&scope={}&state={}",
+            &o.client_id, self.callback_url(), self.scopes(), &state
         ));
 
-        debug!("Redirecting to [{}].", u);
+        debug!("Redirecting to provider {}: [{}].", o.name, u);
 
         Ok(Response::with((status::Found, Redirect(u))))
     }
 
-}
-
-/// A Handler that accepts the redirection back from the provider after authentication has succeeded
-/// or failed. It performs a POST back to the provider to acquire a token based on the temporary `code`
-/// and `state`.
-struct CallbackHandler {
-    client_id: String,
-    client_secret: String,
-    token_uri: Url,
-}
-
-impl Handler for CallbackHandler {
-
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        let mutex = req.get::<Write<Provider>>().unwrap();
+    /// *Phase 2:* Accept the redirect back from the OAuth provider. Validate the `state` and
+    /// exchange the `code` for an access token. Use the access token with the provider's API
+    /// to locate the authenticated user's username and email address.
+    fn callback_handler(&self, req: &mut Request) -> IronResult<Response> {
+        let mutex = self.shared_mutex(req);
         let mut shared = mutex.lock().unwrap();
 
-        let result = extract_callback_params(req).and_then(|(code, state)| {
-            validate_state(&mut *shared, &state).map(|_| { code })
-        }).and_then(|code| {
-            generate_token(&self, code)
-        });
+        let result = self.extract_callback_params(req)
+            .and_then(|(code, state)| self.validate_state(&mut *shared, &state).map(|_| { code }))
+            .and_then(|code| self.generate_token(code));
 
         match result {
             Ok(token) => {
@@ -182,69 +154,148 @@ impl Handler for CallbackHandler {
         }
     }
 
-}
+    /// Extract the "code" and "state" query parameters from the callback request. Fail if either are
+    /// not present.
+    fn extract_callback_params(&self, req: &Request) -> Result<(String, String), &'static str> {
+        let u = req.url.clone().into_generic_url();
 
-/// Extract the "code" and "state" query parameters from the callback request. Fail if either are
-/// not present.
-fn extract_callback_params(req: &Request) -> Result<(String, String), &'static str> {
-    let u = req.url.clone().into_generic_url();
+        let mut code_op: Option<String> = None;
+        let mut state_op: Option<String> = None;
 
-    let mut code_op: Option<String> = None;
-    let mut state_op: Option<String> = None;
+        match u.query_pairs() {
+            Some(pairs) => {
+                for pair in pairs.iter() {
+                    let (ref key, ref value) = *pair;
+                    let key_str: &str = key;
 
-    match u.query_pairs() {
-        Some(pairs) => {
-            for pair in pairs.iter() {
-                let (ref key, ref value) = *pair;
-                let key_str: &str = key;
-
-                match key_str {
-                    "code" => code_op = Some(value.clone()),
-                    "state" => state_op = Some(value.clone()),
-                    _ => warn!("Unrecognized callback parameter: [{}]", &key),
+                    match key_str {
+                        "code" => code_op = Some(value.clone()),
+                        "state" => state_op = Some(value.clone()),
+                        _ => warn!("Unrecognized callback parameter: [{}]", &key),
+                    }
                 }
+            },
+            None => {
+                warn!("Callback request missing any query parameters: [{}]", u);
+                return Err("Callback missing query parameters");
+            },
+        };
+
+        match (code_op, state_op) {
+            (Some(code), Some(state)) => Ok((code, state)),
+            _ => Err("Callback request missing required query parameters"),
+        }
+    }
+
+    /// Ensure that the `state` returned by the OAuth provider is one that was generated by this
+    /// service.
+    fn validate_state(&self, shared: &mut Shared, state: &str) -> Result<(), &'static str> {
+        if shared.validate_state(state) {
+            Ok(())
+        } else {
+            Err("Unfamiliar state encountered. Danger: this could be an XSS attack!")
+        }
+    }
+
+    /// Exchange a `code` obtained through an OAuth handshake for an access token.
+    fn generate_token(&self, code: String) -> Result<String, &'static str> {
+        let o = self.options();
+
+        let b: &str = &format!("client_id={}&client_secret={}&code={}",
+            &o.client_id, &o.client_secret, &code
+        );
+
+        debug!("Attempting to acquire a {} access token from: [{}]", o.name, o.token_uri);
+
+        let mut client = Client::new();
+        let mut req = client.post(o.token_uri.clone()).body(b);
+        req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
+
+        req.send()
+            .map_err(|_| "Unable to acquire a token for you.")
+            .and_then(|mut response| response.read_to_string().map_err(|_| "Unable to read response"))
+            .and_then(|body| json::decode(&body).map_err(|_| "Unable to parse body as JSON"))
+            .map(|token_resp: TokenResponse| token_resp.access_token)
+    }
+
+    /// Register the routes necessary to support this Provider. Usually, this will involve a
+    /// *redirect route*, which will redirect to an external authorization page, and a *callback
+    /// route*, to which the provider is expected to return control with a redirect back.
+    fn route(&self, router: &mut Router) {
+        router.get(self.request_glob(), RequestHandler{provider: self.clone()});
+        router.get(self.callback_glob(), CallbackHandler{provider: self.clone()});
+    }
+
+}
+
+struct RequestHandler<P: Provider> {
+    provider: P
+}
+
+impl <P: Provider> Handler for RequestHandler<P> {
+
+    fn handle(&self, r: &mut Request) -> IronResult<Response> {
+        self.provider.request_handler(r)
+    }
+
+}
+
+struct CallbackHandler<P: Provider> {
+    provider: P
+}
+
+impl <P: Provider> Handler for CallbackHandler<P> {
+
+    fn handle(&self, r: &mut Request) -> IronResult<Response> {
+        self.provider.callback_handler(r)
+    }
+
+}
+
+/// Implement OAuth for GitHub.
+#[derive(Clone)]
+pub struct GitHub {
+    options: Options,
+}
+
+impl GitHub {
+
+    pub fn new(root: &'static str, id: String, secret: String) -> GitHub {
+        GitHub{
+            options: Options{
+                name: "github",
+                root: root,
+                client_id: id,
+                client_secret: secret,
+                request_uri: IronUrl::parse("https://github.com/login/oauth/authorize").unwrap(),
+                token_uri: HyperUrl::parse("https://github.com/login/oauth/access_token").unwrap(),
             }
-        },
-        None => {
-            warn!("Callback request missing any query parameters: [{}]", u);
-            return Err("Callback missing query parameters");
-        },
-    };
-
-    match (code_op, state_op) {
-        (Some(code), Some(state)) => Ok((code, state)),
-        _ => Err("Callback request missing required query parameters"),
+        }
     }
+
 }
 
-fn validate_state(shared: &mut Shared, state: &str) -> Result<(), &'static str> {
-    if shared.validate_state(state) {
-        Ok(())
-    } else {
-        Err("Unfamiliar state encountered. Danger: this could be an XSS attack!")
+impl Key for GitHub {
+
+    type Value = Shared;
+
+}
+
+impl Provider for GitHub {
+
+    fn options(&self) -> &Options {
+        &self.options
     }
-}
 
-fn generate_token(handler: &CallbackHandler, code: String) -> Result<String, &'static str> {
-    let mut client = Client::new();
-    let u: &str = &format!("{}", handler.token_uri);
-    let b: &str = &format!("client_id={}&client_secret={}&code={}",
-        &handler.client_id, &handler.client_secret, &code
-    );
+    fn shared_mutex(&self, req: &mut Request) -> Arc<Mutex<Shared>> {
+        req.get::<Write<GitHub>>().unwrap()
+    }
 
-    debug!("Attempting to acquire token from: [{}]", u);
+    fn scopes(&self) -> &'static str {
+        "user:email"
+    }
 
-    let mut req = client.post(u).body(b);
-    req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
-
-    req.send()
-        .map_err(|_| "Unable to acquire a token for you.")
-        .and_then(|mut response| response.read_to_string().map_err(|_| "Unable to read response"))
-        .and_then(|body| json::decode(&body).map_err(|_| "Unable to parse body as JSON"))
-        .map(|token_resp: TokenResponse| token_resp.access_token)
-}
-
-#[derive(RustcDecodable)]
-struct TokenResponse {
-    access_token: String,
+    fn link(&self, chain: &mut Chain) {
+        chain.link_before(Write::<GitHub>::one(Shared::new()));
+    }
 }
