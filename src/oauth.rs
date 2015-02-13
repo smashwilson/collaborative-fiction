@@ -223,7 +223,7 @@ pub trait Provider : Key + Send + Sync + Clone {
     /// route*, to which the provider is expected to return control with a redirect back.
     fn route(&self, router: &mut Router) {
         router.get(self.request_glob(), RequestHandler{provider: self.clone()});
-        // router.get(self.callback_glob(), move |r| cself.callback_handler(r));
+        router.get(self.callback_glob(), CallbackHandler{provider: self.clone()});
     }
 
     /// Link supporting middleware into the chain to supply common shared state for all OAuth
@@ -242,6 +242,18 @@ impl <P: Provider> Handler for RequestHandler<P> {
 
     fn handle(&self, r: &mut Request) -> IronResult<Response> {
         self.provider.request_handler(r)
+    }
+
+}
+
+struct CallbackHandler<P: Provider> {
+    provider: P
+}
+
+impl <P: Provider> Handler for CallbackHandler<P> {
+
+    fn handle(&self, r: &mut Request) -> IronResult<Response> {
+        self.provider.callback_handler(r)
     }
 
 }
