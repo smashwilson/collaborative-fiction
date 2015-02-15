@@ -13,11 +13,14 @@ log = "*"
 env_logger = "*"
 iron = "*"
 router = "*"
-persistent = "*"
 rand = "*"
 hyper = "*"
 rustc-serialize = "*"
 url = "*"
+
+[dependencies.persistent]
+git = "https://github.com/smashwilson/persistent.git"
+branch = "fix-build"
 
 [dependencies.postgres]
 git = "https://github.com/s-panferov/rust-postgres.git"
