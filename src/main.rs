@@ -12,6 +12,7 @@ extern crate rand;
 extern crate hyper;
 extern crate "rustc-serialize" as rustc_serialize;
 extern crate url;
+extern crate postgres;
 
 use std::env;
 
@@ -22,6 +23,7 @@ use oauth::Provider;
 
 mod oauth;
 
+/// Respond with a simple string on `/` to be able to quickly check if it's up.
 fn health_check(_: &mut Request) -> IronResult<Response> {
     info!("Health check request.");
 
