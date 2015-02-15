@@ -7,11 +7,17 @@ dependencies = [
  "iron 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "persistent 0.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "postgres 0.6.2 (git+https://github.com/s-panferov/rust-postgres.git?branch=feature/update-openssl)",
  "rand 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "router 0.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "url 0.2.20 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "byteorder"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "cookie"
@@ -150,6 +156,28 @@ version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "phf"
+version = "0.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "phf_shared 0.6.7 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "phf_macros"
+version = "0.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "phf_shared 0.6.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "pkg-config"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -167,6 +195,20 @@ dependencies = [
 name = "pnacl-build-helper"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "postgres"
+version = "0.6.2"
+source = "git+https://github.com/s-panferov/rust-postgres.git?branch=feature/update-openssl#84c82ce1dbe6359a69b3dc8ce83b64430f4ee145"
+dependencies = [
+ "byteorder 0.2.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "openssl 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "phf 0.6.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "phf_macros 0.6.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustc-serialize 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "rand"

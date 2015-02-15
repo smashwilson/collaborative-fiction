@@ -18,3 +18,7 @@ rand = "*"
 hyper = "*"
 rustc-serialize = "*"
 url = "*"
+
+[dependencies.postgres]
+git = "https://github.com/s-panferov/rust-postgres.git"
+branch = "feature/update-openssl"
