@@ -20,6 +20,7 @@ use iron::prelude::*;
 use iron::status;
 use router::Router;
 use oauth::Provider;
+use postgres::{Connection, SslMode};
 
 mod oauth;
 
@@ -36,6 +37,9 @@ fn main() {
     let gh_client_id = env::var("FICTION_GITHUBID").unwrap();
     let gh_client_key = env::var("FICTION_GITHUBSECRET").unwrap();
     let github = oauth::GitHub::new("auth", gh_client_id, gh_client_key);
+
+    let pg_address = env::var("FICTION_PG").unwrap();
+    let _ = Connection::connect(&*pg_address, &SslMode::None).unwrap();
 
     let mut router = Router::new();
     router.get("/", health_check);
