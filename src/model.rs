@@ -1,35 +1,45 @@
 //! Data model and PostgreSQL storage abstraction.
 
-use std::error::FromError;
+use std::error::{Error, FromError};
+use std::fmt::{Display, Formatter};
 
-use postgres::{Connection, DbError};
+use postgres::Connection;
+use postgres::error::Error as PgError;
 
-pub struct ModelError {
-    description: String,
-    cause: Option
+pub enum ModelError {
+    Simple(String),
+    Database(PgError)
 }
 
-impl Error for ModelError {
-
+impl <'a> Error for ModelError<'a> {
     fn description(&self) -> &str {
+        *self match {
+            Simple(desc) => &*desc,
+            Database(inner) => 
+        }
         &self.description
     }
 
     fn cause(&self) -> Option<&Error> {
-        &self.cause
+        self.cause
     }
-
 }
 
-impl FromError<DbError> for ModelError {
+impl <'a> FromError<PgError> for ModelError<'a> {
+    fn from_error(err: PgError) -> ModelError<'a> {
+        ModelError::Database(err)
 
-    fn from_error(err: DbError) -> ModelError {
         ModelError{
             description: format!("{}: {}", err.severity(), err.message()),
             cause: Some(err),
         }
     }
+}
 
+impl <'a> Display for ModelError<'a> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        self.description().fmt(f)
+    }
 }
 
 /// Participant in the collaborative storytelling process. Automatically created on first oauth
@@ -41,7 +51,6 @@ pub struct User {
 }
 
 impl User {
-
     /// Create the database table used to store `User` instances. Do nothing if it already
     /// exists.
     fn initialize(conn: &Connection) -> Result<(), ModelError> {
@@ -57,7 +66,7 @@ impl User {
     }
 
     /// Persist any local modifications to this `User` to the database.
-    fn save(&mut self, conn: &Connection) -> Result((), ModelError) {
+    fn save(&mut self, conn: &Connection) -> Result<(), ModelError> {
         match self.id {
             Some(existing_id) => {
                 try!(conn.execute("
@@ -72,7 +81,7 @@ impl User {
                     INSERT INTO users (name, email)
                     VALUES ($1, $2)
                     RETURNING id
-                ").map(|insertion| insertion.query(&[&name, &email]))).next();
+                ").map(|insertion| insertion.query(&[&self.name, &self.email]))).next();
                 self.id = Some(row.get(0));
                 Ok(())
             },
@@ -93,15 +102,14 @@ impl User {
                     id: Some(row.get(0)),
                     name: row.get(1),
                     email: row.get(2),
-                });
+                };
             },
             None => {
                 let mut u = User{id: None, name: name, email: email};
                 try!(u.save(conn));
                 u
             },
-        }
+        };
         Ok(user)
     }
-
 }

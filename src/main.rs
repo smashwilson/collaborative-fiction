@@ -19,10 +19,13 @@ use std::env;
 use iron::prelude::*;
 use iron::status;
 use router::Router;
-use oauth::Provider;
 use postgres::{Connection, SslMode};
 
+use oauth::Provider;
+use model::User;
+
 mod oauth;
+mod model;
 
 /// Respond with a simple string on `/` to be able to quickly check if it's up.
 fn health_check(_: &mut Request) -> IronResult<Response> {
@@ -39,7 +42,9 @@ fn main() {
     let github = oauth::GitHub::new("auth", gh_client_id, gh_client_key);
 
     let pg_address = env::var("FICTION_PG").unwrap();
-    let _ = Connection::connect(&*pg_address, &SslMode::None).unwrap();
+    let pg_conn = Connection::connect(&*pg_address, &SslMode::None).unwrap();
+
+    User::initialize(&pg_conn).unwrap();
 
     let mut router = Router::new();
     router.get("/", health_check);
