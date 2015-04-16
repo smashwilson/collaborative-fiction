@@ -10,7 +10,7 @@ extern crate router;
 extern crate persistent;
 extern crate rand;
 extern crate hyper;
-extern crate "rustc-serialize" as rustc_serialize;
+extern crate rustc_serialize;
 extern crate url;
 extern crate postgres;
 
