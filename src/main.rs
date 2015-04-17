@@ -24,6 +24,7 @@ use postgres::{Connection, SslMode};
 use oauth::Provider;
 use model::User;
 
+mod error;
 mod oauth;
 mod model;
 
