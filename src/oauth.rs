@@ -5,6 +5,7 @@ extern crate persistent;
 
 use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
+use std::io::Read;
 
 use iron::prelude::*;
 use iron::status;
@@ -213,7 +214,13 @@ pub trait Provider : Key + Send + Sync + Clone {
 
         req.send()
             .map_err(|_| "Unable to acquire a token for you.")
-            .and_then(|mut response| response.read_to_string().map_err(|_| "Unable to read response"))
+            .and_then(|mut response| {
+                let mut body = String::new();
+                match response.read_to_string(&mut body) {
+                    Ok(_) => Ok(body),
+                    Err(_) => Err("Unable to read response"),
+                }
+            })
             .and_then(|body| json::decode(&body).map_err(|_| "Unable to parse body as JSON"))
             .map(|token_resp: TokenResponse| token_resp.access_token)
     }
