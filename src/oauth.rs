@@ -5,6 +5,7 @@ extern crate persistent;
 
 use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
+use std::io::Read;
 
 use iron::prelude::*;
 use iron::status;
@@ -39,7 +40,7 @@ struct Options {
 }
 
 /// Mutable state to be shared among the request handlers installed by a specific `Provider`.
-struct Shared {
+pub struct Shared {
     rng: OsRng,
     valid_states: HashSet<String>,
 }
@@ -213,7 +214,13 @@ pub trait Provider : Key + Send + Sync + Clone {
 
         req.send()
             .map_err(|_| "Unable to acquire a token for you.")
-            .and_then(|mut response| response.read_to_string().map_err(|_| "Unable to read response"))
+            .and_then(|mut response| {
+                let mut body = String::new();
+                match response.read_to_string(&mut body) {
+                    Ok(_) => Ok(body),
+                    Err(_) => Err("Unable to read response"),
+                }
+            })
             .and_then(|body| json::decode(&body).map_err(|_| "Unable to parse body as JSON"))
             .map(|token_resp: TokenResponse| token_resp.access_token)
     }
@@ -288,7 +295,9 @@ impl Provider for GitHub {
     }
 
     fn shared_mutex(&self, req: &mut Request) -> Arc<Mutex<Shared>> {
-        req.get::<Write<GitHub>>().unwrap()
+        req.get::<Write<GitHub>>().unwrap_or_else(|_| {
+            panic!("Shared GitHub content not found.");
+        })
     }
 
     fn scopes(&self) -> &'static str {

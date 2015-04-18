@@ -1,0 +1,18 @@
+#!/bin/bash
+#
+# Get a quick psql prompt on the Postgres container.
+
+set -euo pipefail
+
+SUDO="sudo "
+which boot2docker >/dev/null 2>&1 && SUDO=""
+
+CONTAINER_ID=$(${SUDO} docker-compose ps -q db)
+
+exec ${SUDO} docker run \
+  --interactive=true \
+  --tty=true \
+  --rm=true \
+  --link ${CONTAINER_ID}:postgres \
+  postgres \
+  sh -c 'exec psql -h "$POSTGRES_PORT_5432_TCP_ADDR" -p "$POSTGRES_PORT_5432_TCP_PORT" -U postgres'
