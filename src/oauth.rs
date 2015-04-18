@@ -295,7 +295,9 @@ impl Provider for GitHub {
     }
 
     fn shared_mutex(&self, req: &mut Request) -> Arc<Mutex<Shared>> {
-        req.get::<Write<GitHub>>().unwrap()
+        req.get::<Write<GitHub>>().unwrap_or_else(|_| {
+            panic!("Shared GitHub content not found.");
+        })
     }
 
     fn scopes(&self) -> &'static str {
