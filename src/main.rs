@@ -1,5 +1,4 @@
 #![deny(deprecated,stable_features,unused_mut)]
-#![feature(env,core,io)]
 
 #[macro_use]
 extern crate log;

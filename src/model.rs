@@ -1,7 +1,5 @@
 //! Data model and PostgreSQL storage abstraction.
 
-use std::fmt::{Display, Formatter};
-
 use postgres::Connection;
 
 use error::FictError;
