@@ -19,7 +19,7 @@ impl User {
     /// exists.
     fn initialize(conn: &Connection) -> Result<(), FictError> {
         try!(conn.execute("CREATE TABLE users IF NOT EXISTS (
-            id SERIAL PRIMARY KEY,
+            id BIGSERIAL PRIMARY KEY,
             name VARCHAR NOT NULL,
             email VARCHAR NOT NULL
         )", &[]));
@@ -37,7 +37,7 @@ impl User {
                     UPDATE users
                     SET name = $1, email = $2
                     WHERE id = $3
-                ", &[&self.name, &self.email, existing_id]));
+                ", &[&self.name, &self.email, &existing_id]));
                 Ok(())
             },
             None => {
