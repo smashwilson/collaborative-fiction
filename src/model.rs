@@ -16,7 +16,7 @@ impl User {
     /// Create the database table used to store `User` instances. Do nothing if it already
     /// exists.
     pub fn initialize(conn: &Connection) -> Result<(), FictError> {
-        try!(conn.execute("CREATE TABLE users IF NOT EXISTS (
+        try!(conn.execute("CREATE TABLE IF NOT EXISTS users (
             id BIGSERIAL PRIMARY KEY,
             name VARCHAR NOT NULL,
             email VARCHAR NOT NULL
