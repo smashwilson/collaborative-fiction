@@ -3,6 +3,7 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+use std::fmt::Error as FmtError;
 use iron::error::IronError;
 use postgres::error::Error as PgError;
 
@@ -29,7 +30,7 @@ impl Error for FictError {
 
     fn cause(&self) -> Option<&Error> {
         match *self {
-            Message => None,
+            Message(_) => None,
             Database(ref e) => Some(e),
             Iron(ref e) => Some(e),
         }
@@ -37,7 +38,7 @@ impl Error for FictError {
 }
 
 impl Display for FictError {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
         match *self {
             Message(ref s) => f.write_str(s),
             Database(ref e) => Display::fmt(e, f),
