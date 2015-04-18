@@ -55,5 +55,5 @@ fn main() {
     github.link(&mut chain);
 
     info!("Launching collaborative fiction API server on localhost:3000.");
-    Iron::new(chain).listen("localhost:3000").unwrap();
+    Iron::new(chain).http("localhost:3000").unwrap();
 }
