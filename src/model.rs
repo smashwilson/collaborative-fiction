@@ -41,11 +41,13 @@ impl User {
                 Ok(())
             },
             None => {
-                let row = try!(conn.prepare("
+                let insertion = try!(conn.prepare("
                     INSERT INTO users (name, email)
                     VALUES ($1, $2)
                     RETURNING id
-                ").map(|insertion| insertion.query(&[&self.name, &self.email]))).next();
+                "));
+                let cursor = try!(insertion.query(&[&self.name, &self.email]));
+                let row = cursor.into_iter().next().unwrap();
                 self.id = Some(row.get(0));
                 Ok(())
             },
@@ -55,25 +57,27 @@ impl User {
     /// Discover an existing `User` by email address. If none exists, create, persist, and return a
     /// new one with the provided `name`.
     fn find_or_create(conn: &Connection, email: String, name: String) -> Result<User, FictError> {
-        let results = try!(conn.prepare("
+        let selection = try!(conn.prepare("
             SELECT id, name, email FROM users
             WHERE email = $1
-        ").map(|statement| statement.query(&[&email])));
+        "));
+        let cursor = try!(selection.query(&[&email]));
 
-        let user = match results.next() {
+        let user = match cursor.into_iter().next() {
             Some(row) => {
                 User{
                     id: Some(row.get(0)),
                     name: row.get(1),
                     email: row.get(2),
-                };
+                }
             },
             None => {
                 let mut u = User{id: None, name: name, email: email};
                 try!(u.save(conn));
                 u
-            },
+            }
         };
+
         Ok(user)
     }
 }
