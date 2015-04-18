@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 
 use std::fmt::Error as FmtError;
 use iron::error::IronError;
-use postgres::error::Error as PgError;
+use postgres::Error as PgError;
 
 use error::FictError::{Message, Database, Iron};
 

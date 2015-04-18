@@ -17,7 +17,7 @@ pub struct User {
 impl User {
     /// Create the database table used to store `User` instances. Do nothing if it already
     /// exists.
-    fn initialize(conn: &Connection) -> Result<(), FictError> {
+    pub fn initialize(conn: &Connection) -> Result<(), FictError> {
         try!(conn.execute("CREATE TABLE users IF NOT EXISTS (
             id BIGSERIAL PRIMARY KEY,
             name VARCHAR NOT NULL,
@@ -30,7 +30,7 @@ impl User {
     }
 
     /// Persist any local modifications to this `User` to the database.
-    fn save(&mut self, conn: &Connection) -> Result<(), FictError> {
+    pub fn save(&mut self, conn: &Connection) -> Result<(), FictError> {
         match self.id {
             Some(existing_id) => {
                 try!(conn.execute("
@@ -56,7 +56,7 @@ impl User {
 
     /// Discover an existing `User` by email address. If none exists, create, persist, and return a
     /// new one with the provided `name`.
-    fn find_or_create(conn: &Connection, email: String, name: String) -> Result<User, FictError> {
+    pub fn find_or_create(conn: &Connection, email: String, name: String) -> Result<User, FictError> {
         let selection = try!(conn.prepare("
             SELECT id, name, email FROM users
             WHERE email = $1

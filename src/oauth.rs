@@ -40,7 +40,7 @@ struct Options {
 }
 
 /// Mutable state to be shared among the request handlers installed by a specific `Provider`.
-struct Shared {
+pub struct Shared {
     rng: OsRng,
     valid_states: HashSet<String>,
 }
