@@ -58,3 +58,5 @@ impl From<IronError> for FictError {
         FictError::Iron(err)
     }
 }
+
+type FictResult<T> = Result<T, FictError>;
