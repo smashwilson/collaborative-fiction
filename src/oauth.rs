@@ -1,8 +1,5 @@
 //! OAuth2 authentication providers.
 
-extern crate router;
-extern crate persistent;
-
 use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
 use std::io::Read;
