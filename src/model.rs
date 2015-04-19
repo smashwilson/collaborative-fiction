@@ -12,6 +12,8 @@ pub struct User {
     email: String,
 }
 
+pub struct Session;
+
 /// Expect exactly zero or one results from a SQL query. Produce an error if more than one row was
 /// returned.
 fn first_opt(results: postgres::Rows) -> FictResult<Option<postgres::Row>> {

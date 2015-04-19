@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
 use std::io::Read;
 use std::error::Error;
+use std::borrow::ToOwned;
 
 use iron::prelude::*;
 use iron::status;
@@ -16,11 +17,13 @@ use persistent::Write;
 use rand::{OsRng, Rng};
 use hyper::Client;
 use hyper::Url as HyperUrl;
-use hyper::header::{Accept, qitem};
+use hyper::header::{Accept, Authorization, qitem};
 use hyper::mime::{Mime, TopLevel, SubLevel};
-use rustc_serialize::json;
+use rustc_serialize::json::{self, Json};
+use postgres::Connection;
 
 use error::{FictResult, fict_err, as_fict_err};
+use model::{User, Session};
 
 /// Initial size of the "valid state parameter" pool.
 const INIT_STATE_CAPACITY: usize = 100;
@@ -89,6 +92,10 @@ pub trait Provider : Key + Send + Sync + Clone {
     /// format expected by the provider.
     fn scopes(&self) -> &'static str;
 
+    /// Use the authorization token acquired on behalf of the authenticating user to acquire the
+    /// user's username and email address from the provider's API.
+    fn get_user_data(&self, token: &str) -> FictResult<(String, String)>;
+
     /// Create the middleware that will appropriately register `Shared` state for this provider.
     fn link(&self, chain: &mut Chain);
 
@@ -138,13 +145,15 @@ pub trait Provider : Key + Send + Sync + Clone {
 
         let result = self.extract_callback_params(req)
             .and_then(|(code, state)| self.validate_state(&mut *shared, &state).map(|_| { code }))
-            .and_then(|code| self.generate_token(code));
+            .and_then(|code| self.generate_token(code))
+            .and_then(|token| self.find_user(token))
+            .and_then(|user| self.assign_session(user));
 
         match result {
             Ok(token) => {
-                debug!("OAuth flow completed. Acquired token: [{}]", token);
+                debug!("OAuth flow completed. Acquired session.");
 
-                let output = format!("Callback reached! Your token is [{}].", token);
+                let output = format!("You've successfully created a session.");
                 Ok(Response::with((status::Ok, output)))
             },
             Err(message) => {
@@ -225,6 +234,18 @@ pub trait Provider : Key + Send + Sync + Clone {
             .map(|token_resp: TokenResponse| token_resp.access_token)
     }
 
+    fn find_user(&self, conn: &Connection, token: String) -> FictResult<User> {
+        let (email, username) = try!(self.get_user_data(&token));
+        User::find_or_create(conn, email, username)
+    }
+
+    fn assign_session(&self, user: User) -> FictResult<Session> {
+        debug!("Found user: id=[{}] name=[{}] email=[{}]",
+               user.id.unwrap_or(0), user.name, user.email);
+
+        Err(fict_err("Not implemented yet"))
+    }
+
     /// Register the routes necessary to support this Provider. Usually, this will involve a
     /// *redirect route*, which will redirect to an external authorization page, and a *callback
     /// route*, to which the provider is expected to return control with a redirect back.
@@ -302,6 +323,55 @@ impl Provider for GitHub {
 
     fn scopes(&self) -> &'static str {
         "user:email"
+    }
+
+    fn get_user_data(&self, token: &str) -> FictResult<(String, String)> {
+        debug!("Acquiring user profile from GitHub.");
+
+        let auth = Authorization(format!("token {}", token));
+
+        let mut client = Client::new();
+        let mut profile_req = client.get("https://github.com/user");
+        profile_req = profile_req.header(auth.clone());
+        profile_req = profile_req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
+
+        let mut profile_response = try!(profile_req.send());
+        let mut profile_response_body = String::new();
+        try!(profile_response.read_to_string(&mut profile_response_body));
+        let profile = try!(Json::from_str(&profile_response_body));
+
+        let username = try!(profile.find("login")
+            .and_then(|login| login.as_string())
+            .ok_or(fict_err("GitHub profile element 'login' was not a string")));
+
+        match profile.find("email") {
+            Some(&Json::String(public_email)) => {
+                debug!("Discovered public email {} in GitHub profile.", public_email);
+                return Ok((public_email.to_owned(), username.to_owned()));
+            },
+            Some(&Json::Null) => (),
+            _ => return Err(fict_err("GitHub profile element 'email' was not a string or null")),
+        }
+
+        debug!("Profile email is not public. Requesting email address resource.");
+
+        let mut email_req = client.get("https://github.com/user/emails");
+        email_req = email_req.header(auth);
+        email_req = email_req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
+
+        let mut email_response = try!(email_req.send());
+        let mut email_response_body = String::new();
+        try!(email_response.read_to_string(&mut email_response_body));
+        let email_doc = try!(Json::from_str(&email_response_body));
+        let emails = try!(email_doc.as_array()
+            .ok_or(fict_err("GitHub email document root was not an array")));
+
+        let primary_email = try!(emails.iter()
+            .find(|doc| doc.find("primary").and_then(|n| n.as_boolean()).unwrap_or(false))
+            .and_then(|doc| doc.find("email").and_then(|n| n.as_string()))
+            .ok_or(fict_err("No primary email specified")));
+
+        return Ok((primary_email.to_owned(), username.to_owned()));
     }
 
     fn link(&self, chain: &mut Chain) {
