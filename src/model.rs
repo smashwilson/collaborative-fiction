@@ -1,10 +1,8 @@
 //! Data model and PostgreSQL storage abstraction.
 
-use std::borrow::ToOwned;
-
 use postgres::{self, Connection};
 
-use error::{FictError, FictResult, fict_err};
+use error::{FictResult, fict_err};
 
 /// Participant in the collaborative storytelling process. Automatically created on first oauth
 /// login.
