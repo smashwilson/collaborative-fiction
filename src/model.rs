@@ -1,8 +1,10 @@
 //! Data model and PostgreSQL storage abstraction.
 
-use postgres::Connection;
+use std::borrow::ToOwned;
 
-use error::{FictError, FictResult};
+use postgres::{self, Connection};
+
+use error::{FictError, FictResult, fict_err};
 
 /// Participant in the collaborative storytelling process. Automatically created on first oauth
 /// login.
@@ -10,6 +12,51 @@ pub struct User {
     id: Option<i64>,
     name: String,
     email: String,
+}
+
+/// Expect exactly zero or one results from a SQL query. Produce an error if more than one row was
+/// returned.
+fn first_opt(results: postgres::Rows) -> Result<Option<postgres::Row>, FictError> {
+    let mut it = results.into_iter();
+    let first = it.next();
+
+    match it.next() {
+        None => Ok(first),
+        Some(_) => Err(fict_err("Expected only one result, but more than one were returned")),
+    }
+}
+
+/// Execute a SQL statement that is expected to return exactly one result. Produces an
+/// error if zero or more than one results are returned, or if the underlying query produces any.
+fn first(results: postgres::Rows) -> Result<postgres::Row, FictError> {
+    first_opt(results)
+        .and_then(|r| r.ok_or(fict_err("Expected at least one result, but zero were returned")))
+}
+
+/// Create an index using the provided SQL if it doesn't already exist. This is a workaround for
+/// IF NOT EXISTS not being available in PostgreSQL until 9.5.
+fn create_index(conn: &Connection, name: &str, sql: &str) -> Result<(), FictError> {
+    let existing_stmt = try!(conn.prepare(
+        &format!("SELECT to_regclass('{}')::varchar", name)
+    ));
+    let existing_result = try!(existing_stmt.query(&[]));
+    let row = try!(first(existing_result));
+    let exists = match row.get_opt::<usize, String>(0) {
+        Err(postgres::Error::WasNull) => false,
+        Err(e) => return Err(From::from(e)),
+        _ => true,
+    };
+
+    if ! exists {
+        debug!("Creating index {}.", name);
+        match conn.execute(sql, &[]) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(From::from(e)),
+        }
+    } else {
+        debug!("Index {} already exists.", name);
+        Ok(())
+    }
 }
 
 impl User {
@@ -22,7 +69,7 @@ impl User {
             email VARCHAR NOT NULL
         )", &[]));
 
-        try!(conn.execute("CREATE UNIQUE INDEX email_index ON users (email)", &[]));
+        try!(create_index(conn, "email_index", "CREATE UNIQUE INDEX email_index ON users (email)"));
 
         Ok(())
     }

@@ -60,3 +60,8 @@ impl From<IronError> for FictError {
 }
 
 pub type FictResult<T> = Result<T, FictError>;
+
+/// Create a new FictError with the provided message.
+pub fn fict_err<S: Into<String>>(msg: S) -> FictError {
+    FictError::Message(msg.into())
+}
