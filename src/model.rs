@@ -16,7 +16,7 @@ pub struct User {
 
 /// Expect exactly zero or one results from a SQL query. Produce an error if more than one row was
 /// returned.
-fn first_opt(results: postgres::Rows) -> Result<Option<postgres::Row>, FictError> {
+fn first_opt(results: postgres::Rows) -> FictResult<Option<postgres::Row>> {
     let mut it = results.into_iter();
     let first = it.next();
 
@@ -28,14 +28,14 @@ fn first_opt(results: postgres::Rows) -> Result<Option<postgres::Row>, FictError
 
 /// Execute a SQL statement that is expected to return exactly one result. Produces an
 /// error if zero or more than one results are returned, or if the underlying query produces any.
-fn first(results: postgres::Rows) -> Result<postgres::Row, FictError> {
+fn first(results: postgres::Rows) -> FictResult<postgres::Row> {
     first_opt(results)
         .and_then(|r| r.ok_or(fict_err("Expected at least one result, but zero were returned")))
 }
 
 /// Create an index using the provided SQL if it doesn't already exist. This is a workaround for
 /// IF NOT EXISTS not being available in PostgreSQL until 9.5.
-fn create_index(conn: &Connection, name: &str, sql: &str) -> Result<(), FictError> {
+fn create_index(conn: &Connection, name: &str, sql: &str) -> FictResult<()> {
     let existing_stmt = try!(conn.prepare(
         &format!("SELECT to_regclass('{}')::varchar", name)
     ));
