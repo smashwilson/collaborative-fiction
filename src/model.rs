@@ -33,6 +33,32 @@ fn first(results: postgres::Rows) -> Result<postgres::Row, FictError> {
         .and_then(|r| r.ok_or(fict_err("Expected at least one result, but zero were returned")))
 }
 
+/// Create an index using the provided SQL if it doesn't already exist. This is a workaround for
+/// IF NOT EXISTS not being available in PostgreSQL until 9.5.
+fn create_index(conn: &Connection, name: &str, sql: &str) -> Result<(), FictError> {
+    let existing_stmt = try!(conn.prepare(
+        &format!("SELECT to_regclass('{}')::varchar", name)
+    ));
+    let existing_result = try!(existing_stmt.query(&[]));
+    let row = try!(first(existing_result));
+    let exists = match row.get_opt::<usize, String>(0) {
+        Err(postgres::Error::WasNull) => false,
+        Err(e) => return Err(From::from(e)),
+        _ => true,
+    };
+
+    if ! exists {
+        debug!("Creating index {}.", name);
+        match conn.execute(sql, &[]) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(From::from(e)),
+        }
+    } else {
+        debug!("Index {} already exists.", name);
+        Ok(())
+    }
+}
+
 impl User {
     /// Create the database table used to store `User` instances. Do nothing if it already
     /// exists.
@@ -43,19 +69,7 @@ impl User {
             email VARCHAR NOT NULL
         )", &[]));
 
-        let existing_stmt = try!(conn.prepare("
-            SELECT to_regclass('email_index')
-        "));
-        let existing_result = try!(existing_stmt.query(&[]));
-        let row = try!(first(existing_result));
-        let no = match row.get_opt::<usize, String>(0) {
-            Err(postgres::Error::WasNull) => true,
-            _ => false,
-        };
-
-        if no {
-            try!(conn.execute("CREATE UNIQUE INDEX email_index ON users (email)", &[]));
-        }
+        try!(create_index(conn, "email_index", "CREATE UNIQUE INDEX email_index ON users (email)"));
 
         Ok(())
     }
