@@ -4,7 +4,7 @@ use std::borrow::ToOwned;
 
 use postgres::{self, Connection};
 
-use error::FictError;
+use error::{FictError, fict_err};
 
 /// Participant in the collaborative storytelling process. Automatically created on first oauth
 /// login.
@@ -22,7 +22,7 @@ fn first_opt(results: postgres::Rows) -> Result<Option<postgres::Row>, FictError
 
     match it.next() {
         None => Ok(first),
-        Some(_) => Err(FictError::Message("Expected only one result, but more than one were returned".to_owned())),
+        Some(_) => Err(fict_err("Expected only one result, but more than one were returned")),
     }
 }
 
@@ -30,7 +30,7 @@ fn first_opt(results: postgres::Rows) -> Result<Option<postgres::Row>, FictError
 /// error if zero or more than one results are returned, or if the underlying query produces any.
 fn first(results: postgres::Rows) -> Result<postgres::Row, FictError> {
     first_opt(results)
-        .and_then(|r| r.ok_or(FictError::Message("Expected at least one result, but zero were returned".to_owned())))
+        .and_then(|r| r.ok_or(fict_err("Expected at least one result, but zero were returned")))
 }
 
 impl User {

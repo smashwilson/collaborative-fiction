@@ -58,3 +58,8 @@ impl From<IronError> for FictError {
         FictError::Iron(err)
     }
 }
+
+/// Create a new FictError with the provided message.
+pub fn fict_err<S: Into<String>>(msg: S) -> FictError {
+    FictError::Message(msg.into())
+}
