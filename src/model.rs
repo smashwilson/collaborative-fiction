@@ -1,6 +1,8 @@
 //! Data model and PostgreSQL storage abstraction.
 
-use postgres::Connection;
+use std::borrow::ToOwned;
+
+use postgres::{self, Connection};
 
 use error::FictError;
 
@@ -10,6 +12,25 @@ pub struct User {
     id: Option<i64>,
     name: String,
     email: String,
+}
+
+/// Expect exactly zero or one results from a SQL query. Produce an error if more than one row was
+/// returned.
+fn first_opt(results: postgres::Rows) -> Result<Option<postgres::Row>, FictError> {
+    let mut it = results.into_iter();
+    let first = it.next();
+
+    match it.next() {
+        None => Ok(first),
+        Some(_) => Err(FictError::Message("Expected only one result, but more than one were returned".to_owned())),
+    }
+}
+
+/// Execute a SQL statement that is expected to return exactly one result. Produces an
+/// error if zero or more than one results are returned, or if the underlying query produces any.
+fn first(results: postgres::Rows) -> Result<postgres::Row, FictError> {
+    first_opt(results)
+        .and_then(|r| r.ok_or(FictError::Message("Expected at least one result, but zero were returned".to_owned())))
 }
 
 impl User {
@@ -22,7 +43,19 @@ impl User {
             email VARCHAR NOT NULL
         )", &[]));
 
-        try!(conn.execute("CREATE UNIQUE INDEX email_index ON users (email)", &[]));
+        let existing_stmt = try!(conn.prepare("
+            SELECT to_regclass('email_index')
+        "));
+        let existing_result = try!(existing_stmt.query(&[]));
+        let row = try!(first(existing_result));
+        let no = match row.get_opt::<usize, String>(0) {
+            Err(postgres::Error::WasNull) => true,
+            _ => false,
+        };
+
+        if no {
+            try!(conn.execute("CREATE UNIQUE INDEX email_index ON users (email)", &[]));
+        }
 
         Ok(())
     }
