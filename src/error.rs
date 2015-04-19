@@ -98,3 +98,8 @@ pub type FictResult<T> = Result<T, FictError>;
 pub fn fict_err<S: Into<String>>(msg: S) -> FictError {
     FictError::Message(msg.into())
 }
+
+/// Wrap any supported inner error type within a FictError.
+pub fn as_fict_err<E: Into<FictError>>(err: E) -> FictError {
+    err.into()
+}

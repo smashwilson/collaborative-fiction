@@ -20,7 +20,7 @@ use hyper::header::{Accept, qitem};
 use hyper::mime::{Mime, TopLevel, SubLevel};
 use rustc_serialize::json;
 
-use error::{FictResult, FictError, fict_err};
+use error::{FictResult, fict_err, as_fict_err};
 
 /// Initial size of the "valid state parameter" pool.
 const INIT_STATE_CAPACITY: usize = 100;
@@ -213,7 +213,7 @@ pub trait Provider : Key + Send + Sync + Clone {
         req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
 
         req.send()
-            .map_err(|e| FictError::Hyper(e))
+            .map_err(as_fict_err)
             .and_then(|mut response| {
                 let mut body = String::new();
                 match response.read_to_string(&mut body) {
@@ -221,7 +221,7 @@ pub trait Provider : Key + Send + Sync + Clone {
                     Err(_) => Err(fict_err("Unable to read response")),
                 }
             })
-            .and_then(|body| json::decode(&body).map_err(|e| FictError::JSONDecode(e)))
+            .and_then(|body| json::decode(&body).map_err(as_fict_err))
             .map(|token_resp: TokenResponse| token_resp.access_token)
     }
 
