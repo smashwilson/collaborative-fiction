@@ -2,7 +2,7 @@
 
 use postgres::Connection;
 
-use error::FictError;
+use error::{FictError, FictResult};
 
 /// Participant in the collaborative storytelling process. Automatically created on first oauth
 /// login.
@@ -15,7 +15,7 @@ pub struct User {
 impl User {
     /// Create the database table used to store `User` instances. Do nothing if it already
     /// exists.
-    pub fn initialize(conn: &Connection) -> Result<(), FictError> {
+    pub fn initialize(conn: &Connection) -> FictResult<()> {
         try!(conn.execute("CREATE TABLE IF NOT EXISTS users (
             id BIGSERIAL PRIMARY KEY,
             name VARCHAR NOT NULL,
@@ -28,7 +28,7 @@ impl User {
     }
 
     /// Persist any local modifications to this `User` to the database.
-    pub fn save(&mut self, conn: &Connection) -> Result<(), FictError> {
+    pub fn save(&mut self, conn: &Connection) -> FictResult<()> {
         match self.id {
             Some(existing_id) => {
                 try!(conn.execute("
@@ -54,7 +54,7 @@ impl User {
 
     /// Discover an existing `User` by email address. If none exists, create, persist, and return a
     /// new one with the provided `name`.
-    pub fn find_or_create(conn: &Connection, email: String, name: String) -> Result<User, FictError> {
+    pub fn find_or_create(conn: &Connection, email: String, name: String) -> FictResult<User> {
         let selection = try!(conn.prepare("
             SELECT id, name, email FROM users
             WHERE email = $1

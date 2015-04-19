@@ -59,4 +59,4 @@ impl From<IronError> for FictError {
     }
 }
 
-type FictResult<T> = Result<T, FictError>;
+pub type FictResult<T> = Result<T, FictError>;
