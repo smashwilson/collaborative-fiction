@@ -17,7 +17,7 @@ use persistent::Write;
 use rand::{OsRng, Rng};
 use hyper::Client;
 use hyper::Url as HyperUrl;
-use hyper::header::{Accept, Authorization, qitem};
+use hyper::header::{Accept, Authorization, UserAgent, qitem};
 use hyper::mime::{Mime, TopLevel, SubLevel};
 use rustc_serialize::json::{self, Json};
 use postgres::Connection;
@@ -286,6 +286,9 @@ impl <P: Provider> Handler for CallbackHandler<P> {
 
 }
 
+/// Custom user agent to use for outgoing requests.
+const USER_AGENT: &'static str = "collabfict/0.0.1 hyper/0.3.13 rust/1.0.0-beta.2";
+
 /// Manage a connection to an HTTPS API that accepts and produces JSON documents.
 struct JsonConnection {
     client: Client,
@@ -307,6 +310,7 @@ impl JsonConnection {
         let mut req = self.client.get(url);
         req = req.header(self.auth.clone());
         req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
+        req = req.header(UserAgent(USER_AGENT.to_owned()));
 
         let mut resp = try!(req.send());
 
@@ -369,7 +373,8 @@ impl Provider for GitHub {
 
         let mut conn = JsonConnection::new("token", token);
 
-        let profile_doc = try!(conn.get("https://github.com/user"));
+        let profile_doc = try!(conn.get("https://api.github.com/user"));
+
         let username = try!(profile_doc.find("login")
             .and_then(|login| login.as_string())
             .ok_or(fict_err("GitHub profile element 'login' was not a string")));
@@ -385,7 +390,7 @@ impl Provider for GitHub {
 
         debug!("Profile email is not public. Requesting email address resource.");
 
-        let email_doc = try!(conn.get("https://github.com/user/emails"));
+        let email_doc = try!(conn.get("https://api.github.com/user/emails"));
 
         let emails = try!(email_doc.as_array()
             .ok_or(fict_err("GitHub email document root was not an array")));
