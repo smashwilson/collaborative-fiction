@@ -1,7 +1,7 @@
 //! Error structures.
 
 use std::error::Error;
-use std::io::error::Error as IOError;
+use std::io::Error as IOError;
 use std::fmt::{Display, Formatter};
 
 use std::fmt::Error as FmtError;
