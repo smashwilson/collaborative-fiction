@@ -12,16 +12,17 @@ extern crate hyper;
 extern crate rustc_serialize;
 extern crate url;
 extern crate postgres;
+extern crate r2d2;
+extern crate r2d2_postgres;
 
 use std::env;
 
 use iron::prelude::*;
 use iron::status;
 use router::Router;
-use postgres::{Connection, SslMode};
 
 use oauth::Provider;
-use model::User;
+use model::Database;
 
 mod error;
 mod oauth;
@@ -41,16 +42,12 @@ fn main() {
     let gh_client_key = env::var("FICTION_GITHUBSECRET").unwrap();
     let github = oauth::GitHub::new("auth", gh_client_id, gh_client_key);
 
-    let pg_address = env::var("FICTION_PG").unwrap();
-    let pg_conn = Connection::connect(&*pg_address, &SslMode::None).unwrap();
-
-    User::initialize(&pg_conn).unwrap();
-
     let mut router = Router::new();
     router.get("/", health_check);
     github.route(&mut router);
 
     let mut chain = Chain::new(router);
+    Database::link(&mut chain).unwrap();
     github.link(&mut chain);
 
     info!("Launching collaborative fiction API server on localhost:3000.");

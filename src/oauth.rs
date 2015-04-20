@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
 use std::io::Read;
 use std::error::Error;
+use std::borrow::ToOwned;
 
 use iron::prelude::*;
 use iron::status;
@@ -16,11 +17,13 @@ use persistent::Write;
 use rand::{OsRng, Rng};
 use hyper::Client;
 use hyper::Url as HyperUrl;
-use hyper::header::{Accept, qitem};
+use hyper::header::{Accept, Authorization, UserAgent, qitem};
 use hyper::mime::{Mime, TopLevel, SubLevel};
-use rustc_serialize::json;
+use rustc_serialize::json::{self, Json};
+use postgres::Connection;
 
 use error::{FictResult, fict_err, as_fict_err};
+use model::{Database, User, Session};
 
 /// Initial size of the "valid state parameter" pool.
 const INIT_STATE_CAPACITY: usize = 100;
@@ -89,6 +92,10 @@ pub trait Provider : Key + Send + Sync + Clone {
     /// format expected by the provider.
     fn scopes(&self) -> &'static str;
 
+    /// Use the authorization token acquired on behalf of the authenticating user to acquire the
+    /// user's username and email address from the provider's API.
+    fn get_user_data(&self, token: &str) -> FictResult<(String, String)>;
+
     /// Create the middleware that will appropriately register `Shared` state for this provider.
     fn link(&self, chain: &mut Chain);
 
@@ -133,18 +140,26 @@ pub trait Provider : Key + Send + Sync + Clone {
     /// exchange the `code` for an access token. Use the access token with the provider's API
     /// to locate the authenticated user's username and email address.
     fn callback_handler(&self, req: &mut Request) -> IronResult<Response> {
+        let mutex = req.get::<Write<Database>>().unwrap_or_else(|_| {
+            panic!("No database connection available");
+        });
+        let pool = mutex.lock().unwrap();
+        let conn = pool.get().unwrap();
+
         let mutex = self.shared_mutex(req);
         let mut shared = mutex.lock().unwrap();
 
         let result = self.extract_callback_params(req)
             .and_then(|(code, state)| self.validate_state(&mut *shared, &state).map(|_| { code }))
-            .and_then(|code| self.generate_token(code));
+            .and_then(|code| self.generate_token(code))
+            .and_then(|token| self.find_user(&*conn, token))
+            .and_then(|user| self.assign_session(user));
 
         match result {
-            Ok(token) => {
-                debug!("OAuth flow completed. Acquired token: [{}]", token);
+            Ok(..) => {
+                debug!("OAuth flow completed. Acquired session.");
 
-                let output = format!("Callback reached! Your token is [{}].", token);
+                let output = format!("You've successfully created a session.");
                 Ok(Response::with((status::Ok, output)))
             },
             Err(message) => {
@@ -225,6 +240,18 @@ pub trait Provider : Key + Send + Sync + Clone {
             .map(|token_resp: TokenResponse| token_resp.access_token)
     }
 
+    fn find_user(&self, conn: &Connection, token: String) -> FictResult<User> {
+        let (email, username) = try!(self.get_user_data(&token));
+        User::find_or_create(conn, email, username)
+    }
+
+    fn assign_session(&self, user: User) -> FictResult<Session> {
+        debug!("Found user: id=[{}] name=[{}] email=[{}]",
+               user.id.unwrap_or(0), user.name, user.email);
+
+        Err(fict_err("Not implemented yet"))
+    }
+
     /// Register the routes necessary to support this Provider. Usually, this will involve a
     /// *redirect route*, which will redirect to an external authorization page, and a *callback
     /// route*, to which the provider is expected to return control with a redirect back.
@@ -255,6 +282,43 @@ impl <P: Provider> Handler for CallbackHandler<P> {
 
     fn handle(&self, r: &mut Request) -> IronResult<Response> {
         self.provider.callback_handler(r)
+    }
+
+}
+
+/// Custom user agent to use for outgoing requests.
+const USER_AGENT: &'static str = "collabfict/0.0.1 hyper/0.3.13 rust/1.0.0-beta.2";
+
+/// Manage a connection to an HTTPS API that accepts and produces JSON documents.
+struct JsonConnection {
+    client: Client,
+    auth: Authorization<String>,
+}
+
+impl JsonConnection {
+
+    fn new(auth_method: &str, token: &str) -> JsonConnection {
+        let auth_body = format!("{} {}", auth_method, token);
+
+        JsonConnection{
+            client: Client::new(),
+            auth: Authorization(auth_body)
+        }
+    }
+
+    fn get(&mut self, url: &str) -> FictResult<Json> {
+        let mut req = self.client.get(url);
+        req = req.header(self.auth.clone());
+        req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
+        req = req.header(UserAgent(USER_AGENT.to_owned()));
+
+        let mut resp = try!(req.send());
+
+        let mut resp_body = String::new();
+        try!(resp.read_to_string(&mut resp_body));
+
+        Json::from_str(&resp_body)
+            .map_err(|e| From::from(e) )
     }
 
 }
@@ -302,6 +366,41 @@ impl Provider for GitHub {
 
     fn scopes(&self) -> &'static str {
         "user:email"
+    }
+
+    fn get_user_data(&self, token: &str) -> FictResult<(String, String)> {
+        debug!("Acquiring user profile from GitHub.");
+
+        let mut conn = JsonConnection::new("token", token);
+
+        let profile_doc = try!(conn.get("https://api.github.com/user"));
+
+        let username = try!(profile_doc.find("login")
+            .and_then(|login| login.as_string())
+            .ok_or(fict_err("GitHub profile element 'login' was not a string")));
+
+        match profile_doc.find("email") {
+            Some(&Json::String(ref public_email)) => {
+                debug!("Discovered public email {} in GitHub profile.", public_email);
+                return Ok((public_email.to_owned(), username.to_owned()));
+            },
+            Some(&Json::Null) => (),
+            _ => return Err(fict_err("GitHub profile element 'email' was not a string or null")),
+        }
+
+        debug!("Profile email is not public. Requesting email address resource.");
+
+        let email_doc = try!(conn.get("https://api.github.com/user/emails"));
+
+        let emails = try!(email_doc.as_array()
+            .ok_or(fict_err("GitHub email document root was not an array")));
+
+        let primary_email = try!(emails.iter()
+            .find(|doc| doc.find("primary").and_then(|n| n.as_boolean()).unwrap_or(false))
+            .and_then(|doc| doc.find("email").and_then(|n| n.as_string()))
+            .ok_or(fict_err("No primary email specified")));
+
+        return Ok((primary_email.to_owned(), username.to_owned()));
     }
 
     fn link(&self, chain: &mut Chain) {
