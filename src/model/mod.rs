@@ -1,7 +1,14 @@
 //! Data model and PostgreSQL storage abstraction.
 
-use iron::{BeforeMiddleware, IronResult};
-use postgres::{self, Connection};
+use std::env;
+use std::default::Default;
+
+use iron::Chain;
+use iron::typemap::Key;
+use persistent::Write;
+use postgres::{self, Connection, SslMode};
+use r2d2::{LoggingErrorHandler, Pool};
+use r2d2_postgres::PostgresConnectionManager;
 
 use error::{FictResult, fict_err};
 
@@ -10,6 +17,42 @@ mod user;
 pub use self::user::User;
 
 pub struct Session;
+
+/// Database is the type key used to access the connection pool.
+pub struct Database;
+
+type PostgresPool = Pool<PostgresConnectionManager>;
+
+impl Key for Database {
+    type Value = PostgresPool;
+}
+
+impl Database {
+    pub fn link(chain: &mut Chain) -> FictResult<()> {
+        let pg_address = env::var("FICTION_PG").unwrap();
+
+        let config = Default::default();
+        let manager = PostgresConnectionManager::new(&*pg_address, SslMode::None).unwrap();
+        let error_handler = Box::new(LoggingErrorHandler);
+        let pool = Pool::new(config, manager, error_handler).unwrap();
+
+        try!(Database::initialize(&pool));
+
+        let w = Write::<Database>::one(pool);
+        chain.link_before(w);
+
+        Ok(())
+    }
+
+    fn initialize(pool: &PostgresPool) -> FictResult<()> {
+        let conn = pool.get().unwrap();
+
+        try!(User::initialize(&conn));
+
+        Ok(())
+    }
+}
+
 
 /// Expect exactly zero or one results from a SQL query. Produce an error if more than one row was
 /// returned.
