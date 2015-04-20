@@ -351,7 +351,7 @@ impl Provider for GitHub {
             .ok_or(fict_err("GitHub profile element 'login' was not a string")));
 
         match profile.find("email") {
-            Some(&Json::String(public_email)) => {
+            Some(&Json::String(ref public_email)) => {
                 debug!("Discovered public email {} in GitHub profile.", public_email);
                 return Ok((public_email.to_owned(), username.to_owned()));
             },
