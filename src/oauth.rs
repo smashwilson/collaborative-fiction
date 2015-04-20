@@ -23,7 +23,7 @@ use rustc_serialize::json::{self, Json};
 use postgres::Connection;
 
 use error::{FictResult, fict_err, as_fict_err};
-use model::{User, Session};
+use model::{Database, User, Session};
 
 /// Initial size of the "valid state parameter" pool.
 const INIT_STATE_CAPACITY: usize = 100;
@@ -140,13 +140,19 @@ pub trait Provider : Key + Send + Sync + Clone {
     /// exchange the `code` for an access token. Use the access token with the provider's API
     /// to locate the authenticated user's username and email address.
     fn callback_handler(&self, req: &mut Request) -> IronResult<Response> {
+        let mutex = req.get::<Write<Database>>().unwrap_or_else(|_| {
+            panic!("No database connection available");
+        });
+        let pool = mutex.lock().unwrap();
+        let conn = pool.get().unwrap();
+
         let mutex = self.shared_mutex(req);
         let mut shared = mutex.lock().unwrap();
 
         let result = self.extract_callback_params(req)
             .and_then(|(code, state)| self.validate_state(&mut *shared, &state).map(|_| { code }))
             .and_then(|code| self.generate_token(code))
-            .and_then(|token| self.find_user(token))
+            .and_then(|token| self.find_user(&*conn, token))
             .and_then(|user| self.assign_session(user));
 
         match result {
