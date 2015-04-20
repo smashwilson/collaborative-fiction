@@ -21,7 +21,7 @@ pub struct Session;
 /// Database is the type key used to access the connection pool.
 pub struct Database;
 
-type PostgresPool = Pool<PostgresConnectionManager>;
+pub type PostgresPool = Pool<PostgresConnectionManager>;
 
 impl Key for Database {
     type Value = PostgresPool;
