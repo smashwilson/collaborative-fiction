@@ -20,7 +20,6 @@ use std::env;
 use iron::prelude::*;
 use iron::status;
 use router::Router;
-use postgres::{Connection, SslMode};
 
 use oauth::Provider;
 use model::Database;
@@ -48,7 +47,7 @@ fn main() {
     github.route(&mut router);
 
     let mut chain = Chain::new(router);
-    Database::link(&mut chain);
+    Database::link(&mut chain).unwrap();
     github.link(&mut chain);
 
     info!("Launching collaborative fiction API server on localhost:3000.");

@@ -156,7 +156,7 @@ pub trait Provider : Key + Send + Sync + Clone {
             .and_then(|user| self.assign_session(user));
 
         match result {
-            Ok(token) => {
+            Ok(..) => {
                 debug!("OAuth flow completed. Acquired session.");
 
                 let output = format!("You've successfully created a session.");
