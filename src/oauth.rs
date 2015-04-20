@@ -286,6 +286,39 @@ impl <P: Provider> Handler for CallbackHandler<P> {
 
 }
 
+/// Manage a connection to an HTTPS API that accepts and produces JSON documents.
+struct JsonConnection {
+    client: Client,
+    auth: Authorization<String>,
+}
+
+impl JsonConnection {
+
+    fn new(auth_method: &str, token: &str) -> JsonConnection {
+        let auth_body = format!("{} {}", auth_method, token);
+
+        JsonConnection{
+            client: Client::new(),
+            auth: Authorization(auth_body)
+        }
+    }
+
+    fn get(&mut self, url: &str) -> FictResult<Json> {
+        let mut req = self.client.get(url);
+        req = req.header(self.auth.clone());
+        req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
+
+        let mut resp = try!(req.send());
+
+        let mut resp_body = String::new();
+        try!(resp.read_to_string(&mut resp_body));
+
+        Json::from_str(&resp_body)
+            .map_err(|e| From::from(e) )
+    }
+
+}
+
 /// Implement OAuth for GitHub.
 #[derive(Clone)]
 pub struct GitHub {
@@ -334,23 +367,14 @@ impl Provider for GitHub {
     fn get_user_data(&self, token: &str) -> FictResult<(String, String)> {
         debug!("Acquiring user profile from GitHub.");
 
-        let auth = Authorization(format!("token {}", token));
+        let mut conn = JsonConnection::new("token", token);
 
-        let mut client = Client::new();
-        let mut profile_req = client.get("https://github.com/user");
-        profile_req = profile_req.header(auth.clone());
-        profile_req = profile_req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
-
-        let mut profile_response = try!(profile_req.send());
-        let mut profile_response_body = String::new();
-        try!(profile_response.read_to_string(&mut profile_response_body));
-        let profile = try!(Json::from_str(&profile_response_body));
-
-        let username = try!(profile.find("login")
+        let profile_doc = try!(conn.get("https://github.com/user"));
+        let username = try!(profile_doc.find("login")
             .and_then(|login| login.as_string())
             .ok_or(fict_err("GitHub profile element 'login' was not a string")));
 
-        match profile.find("email") {
+        match profile_doc.find("email") {
             Some(&Json::String(ref public_email)) => {
                 debug!("Discovered public email {} in GitHub profile.", public_email);
                 return Ok((public_email.to_owned(), username.to_owned()));
@@ -361,14 +385,8 @@ impl Provider for GitHub {
 
         debug!("Profile email is not public. Requesting email address resource.");
 
-        let mut email_req = client.get("https://github.com/user/emails");
-        email_req = email_req.header(auth);
-        email_req = email_req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
+        let email_doc = try!(conn.get("https://github.com/user/emails"));
 
-        let mut email_response = try!(email_req.send());
-        let mut email_response_body = String::new();
-        try!(email_response.read_to_string(&mut email_response_body));
-        let email_doc = try!(Json::from_str(&email_response_body));
         let emails = try!(email_doc.as_array()
             .ok_or(fict_err("GitHub email document root was not an array")));
 
