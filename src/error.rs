@@ -7,6 +7,7 @@ use std;
 use std::fmt::Error as FmtError;
 use log;
 use postgres;
+use r2d2;
 use hyper;
 use iron;
 use rustc_serialize;
@@ -59,6 +60,9 @@ impl NonFictError for std::env::VarError {}
 impl NonFictError for log::SetLoggerError {}
 impl NonFictError for iron::IronError {}
 impl NonFictError for postgres::Error {}
+impl NonFictError for postgres::ConnectError {}
+impl NonFictError for r2d2::InitializationError {}
+impl NonFictError for r2d2::GetTimeout {}
 impl NonFictError for hyper::HttpError {}
 impl NonFictError for rustc_serialize::json::DecoderError {}
 impl NonFictError for rustc_serialize::json::EncoderError {}
