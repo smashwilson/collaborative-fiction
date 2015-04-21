@@ -3,8 +3,9 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use std::io;
+use std;
 use std::fmt::Error as FmtError;
+use log;
 use postgres;
 use hyper;
 use iron;
@@ -53,7 +54,9 @@ impl From<FmtError> for FictError {
 }
 
 trait NonFictError: Error {}
-impl NonFictError for io::Error {}
+impl NonFictError for std::io::Error {}
+impl NonFictError for std::env::VarError {}
+impl NonFictError for log::SetLoggerError {}
 impl NonFictError for iron::IronError {}
 impl NonFictError for postgres::Error {}
 impl NonFictError for hyper::HttpError {}
