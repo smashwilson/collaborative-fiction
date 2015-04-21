@@ -29,12 +29,12 @@ impl Key for Database {
 
 impl Database {
     pub fn link(chain: &mut Chain) -> FictResult<()> {
-        let pg_address = env::var("FICTION_PG").unwrap();
+        let pg_address = try!(env::var("FICTION_PG"));
 
         let config = Default::default();
-        let manager = PostgresConnectionManager::new(&*pg_address, SslMode::None).unwrap();
+        let manager = try!(PostgresConnectionManager::new(&*pg_address, SslMode::None));
         let error_handler = Box::new(LoggingErrorHandler);
-        let pool = Pool::new(config, manager, error_handler).unwrap();
+        let pool = try!(Pool::new(config, manager, error_handler));
 
         try!(Database::initialize(&pool));
 
@@ -45,7 +45,7 @@ impl Database {
     }
 
     fn initialize(pool: &PostgresPool) -> FictResult<()> {
-        let conn = pool.get().unwrap();
+        let conn = try!(pool.get());
 
         try!(User::initialize(&conn));
 

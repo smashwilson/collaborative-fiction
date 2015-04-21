@@ -64,6 +64,7 @@ impl User {
 
         let user = match cursor.into_iter().next() {
             Some(row) => {
+                debug!("Found existing user with email [{}].", email);
                 User{
                     id: Some(row.get(0)),
                     name: row.get(1),
@@ -71,6 +72,7 @@ impl User {
                 }
             },
             None => {
+                info!("Creating user with email [{}] and username [{}].", email, name);
                 let mut u = User{id: None, name: name, email: email};
                 try!(u.save(conn));
                 u

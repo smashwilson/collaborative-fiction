@@ -16,6 +16,7 @@ extern crate r2d2;
 extern crate r2d2_postgres;
 
 use std::env;
+use std::process;
 
 use iron::prelude::*;
 use iron::status;
@@ -23,6 +24,7 @@ use router::Router;
 
 use oauth::Provider;
 use model::Database;
+use error::FictResult;
 
 mod error;
 mod oauth;
@@ -36,10 +38,18 @@ fn health_check(_: &mut Request) -> IronResult<Response> {
 }
 
 fn main() {
-    env_logger::init().unwrap();
+    let status = match launch() {
+        Ok(..) => 0,
+        Err(e) => { error!("Oops: {}", e); 1 },
+    };
+    process::exit(status);
+}
 
-    let gh_client_id = env::var("FICTION_GITHUBID").unwrap();
-    let gh_client_key = env::var("FICTION_GITHUBSECRET").unwrap();
+fn launch() -> FictResult<()> {
+    try!(env_logger::init());
+
+    let gh_client_id = try!(env::var("FICTION_GITHUBID"));
+    let gh_client_key = try!(env::var("FICTION_GITHUBSECRET"));
     let github = oauth::GitHub::new("auth", gh_client_id, gh_client_key);
 
     let mut router = Router::new();
@@ -47,9 +57,11 @@ fn main() {
     github.route(&mut router);
 
     let mut chain = Chain::new(router);
-    Database::link(&mut chain).unwrap();
+    try!(Database::link(&mut chain));
     github.link(&mut chain);
 
     info!("Launching collaborative fiction API server on localhost:3000.");
-    Iron::new(chain).http("localhost:3000").unwrap();
+    try!(Iron::new(chain).http("localhost:3000"));
+
+    Ok(())
 }
