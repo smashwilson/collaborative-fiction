@@ -1,58 +1,38 @@
 //! Error structures.
 
 use std::error::Error;
-use std::io::Error as IOError;
 use std::fmt::{Display, Formatter};
 
+use std::io;
 use std::fmt::Error as FmtError;
-use iron::error::IronError;
-use postgres::Error as PgError;
-use hyper::HttpError;
-use rustc_serialize::json::DecoderError as JSONDecoderError;
-use rustc_serialize::json::EncoderError as JSONEncoderError;
-use rustc_serialize::json::ParserError as JSONParserError;
+use postgres;
+use hyper;
+use iron;
+use rustc_serialize;
 
-use error::FictError::{Message, IO, Database, Iron, Hyper, JSONDecode, JSONEncode, JSONParser};
+use error::FictError::{Message, Cause};
 
-/// An Error type that can be used throughout the application. It can provide its own error message,
-/// wrap an underlying error, or both.
+/// An Error type that can be used throughout the application. It can provide its own error message
+/// or wrap an underlying error of a different type.
 ///
 #[derive(Debug)]
 pub enum FictError {
     Message(String),
-    IO(IOError),
-    Database(PgError),
-    Iron(IronError),
-    Hyper(HttpError),
-    JSONDecode(JSONDecoderError),
-    JSONEncode(JSONEncoderError),
-    JSONParser(JSONParserError),
+    Cause(Box<Error>),
 }
 
 impl Error for FictError {
     fn description(&self) -> &str {
         match *self {
             Message(ref s) => s,
-            IO(ref e) => e.description(),
-            Database(ref e) => e.description(),
-            Iron(ref e) => e.description(),
-            Hyper(ref e) => e.description(),
-            JSONDecode(ref e) => e.description(),
-            JSONEncode(ref e) => e.description(),
-            JSONParser(ref e) => e.description(),
+            Cause(ref e) => e.description(),
         }
     }
 
     fn cause(&self) -> Option<&Error> {
         match *self {
             Message(..) => None,
-            IO(ref e) => Some(e),
-            Database(ref e) => Some(e),
-            Iron(ref e) => Some(e),
-            Hyper(ref e) => Some(e),
-            JSONDecode(ref e) => Some(e),
-            JSONEncode(ref e) => Some(e),
-            JSONParser(ref e) => Some(e),
+            Cause(ref e) => Some(&**e),
         }
     }
 }
@@ -61,59 +41,33 @@ impl Display for FictError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
         match *self {
             Message(ref s) => f.write_str(s),
-            IO(ref e) => Display::fmt(e, f),
-            Database(ref e) => Display::fmt(e, f),
-            Iron(ref e) => Display::fmt(e, f),
-            Hyper(ref e) => Display::fmt(e, f),
-            JSONDecode(ref e) => Display::fmt(e, f),
-            JSONEncode(ref e) => Display::fmt(e, f),
-            JSONParser(ref e) => Display::fmt(e, f),
+            Cause(ref e) => Display::fmt(e, f),
         }
     }
 }
 
-impl From<IOError> for FictError {
-    fn from(err: IOError) -> FictError {
-        FictError::IO(err)
+impl From<FmtError> for FictError {
+    fn from(err: FmtError) -> FictError {
+        FictError::Message(format!("{}", err))
     }
 }
 
-impl From<PgError> for FictError {
-    fn from(err: PgError) -> FictError {
-        FictError::Database(err)
+trait NonFictError: Error {}
+impl NonFictError for io::Error {}
+impl NonFictError for iron::IronError {}
+impl NonFictError for postgres::Error {}
+impl NonFictError for hyper::HttpError {}
+impl NonFictError for rustc_serialize::json::DecoderError {}
+impl NonFictError for rustc_serialize::json::EncoderError {}
+impl NonFictError for rustc_serialize::json::ParserError {}
+
+impl<E: NonFictError + 'static> From<E> for FictError {
+    fn from(err: E) -> FictError {
+        FictError::Cause(Box::new(err))
     }
 }
 
-impl From<IronError> for FictError {
-    fn from(err: IronError) -> FictError {
-        FictError::Iron(err)
-    }
-}
-
-impl From<HttpError> for FictError {
-    fn from(err: HttpError) -> FictError {
-        FictError::Hyper(err)
-    }
-}
-
-impl From<JSONDecoderError> for FictError {
-    fn from(err: JSONDecoderError) -> FictError {
-        FictError::JSONDecode(err)
-    }
-}
-
-impl From<JSONEncoderError> for FictError {
-    fn from(err: JSONEncoderError) -> FictError {
-        FictError::JSONEncode(err)
-    }
-}
-
-impl From<JSONParserError> for FictError {
-    fn from(err: JSONParserError) -> FictError {
-        FictError::JSONParser(err)
-    }
-}
-
+/// Convenient type alias for a Result that uses FictError as its error type.
 pub type FictResult<T> = Result<T, FictError>;
 
 /// Create a new FictError with the provided message.
