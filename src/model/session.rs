@@ -66,15 +66,15 @@ impl Session {
         let rows = try!(selection.query(&[&token]));
         let row_opt = try!(first_opt(rows));
 
-        row_opt.and_then(|row| Session{
+        Ok(row_opt.map(|row| Session{
             id: row.get(0),
             token: row.get(1),
             user_id: row.get(2),
-        })
+        }))
     }
 
     /// Access the User corresponding to this Session.
     pub fn user(&self, conn: &Connection) -> FictResult<User> {
-        User::with_id(self.user_id)
+        User::with_id(conn, self.user_id)
     }
 }
