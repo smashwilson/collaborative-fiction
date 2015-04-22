@@ -159,7 +159,7 @@ pub trait Provider : Key + Send + Sync + Clone {
             Ok(session) => {
                 debug!("OAuth flow completed. Acquired {}.", session);
 
-                let output = format!("You've successfully created a session.");
+                let output = format!("You've successfully created a session: [{}]", session.token);
                 Ok(Response::with((status::Ok, output)))
             },
             Err(message) => {

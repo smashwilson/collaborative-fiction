@@ -10,8 +10,8 @@ use error::FictResult;
 
 /// An active user of the site.
 pub struct Session {
-    id: i64,
-    token: i64,
+    pub id: i64,
+    pub token: i64,
     user_id: i64,
 }
 
