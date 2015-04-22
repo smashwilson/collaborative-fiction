@@ -1,5 +1,7 @@
 //! Create and manage active user sessions.
 
+use std::fmt::{self, Display, Formatter};
+
 use postgres::Connection;
 use rand::Rng;
 
@@ -76,5 +78,12 @@ impl Session {
     /// Access the User corresponding to this Session.
     pub fn user(&self, conn: &Connection) -> FictResult<User> {
         User::with_id(conn, self.user_id)
+    }
+}
+
+impl Display for Session {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        write!(f, "Session(id=[{}] user_id=[{}] token=[..])",
+            self.id, self.user_id)
     }
 }
