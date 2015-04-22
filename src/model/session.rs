@@ -35,7 +35,7 @@ impl Session {
     /// Assign a new Session to a newly logged-in User.
     ///
     /// Panics if the User has not been persisted.
-    pub fn assign(conn: &Connection, u: User, rng: &mut Rng) -> FictResult<Session> {
+    pub fn assign<R: Rng>(conn: &Connection, u: User, rng: &mut R) -> FictResult<Session> {
         let token = rng.gen::<i64>();
         let user_id = u.id.unwrap();
 
