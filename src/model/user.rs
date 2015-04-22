@@ -1,5 +1,7 @@
 //! A collaborative fiction user.
 
+use std::fmt::{self, Display, Formatter};
+
 use postgres::Connection;
 
 use model::{create_index, first};
@@ -99,5 +101,14 @@ impl User {
             name: row.get(1),
             email: row.get(2),
         })
+    }
+}
+
+impl Display for User {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        match self.id {
+            Some(i) => write!(f, "User(id=[{}] name=[{}] email=[{}])", i, self.name, self.email),
+            None => write!(f, "User(*new* name=[{}] email=[{}])", self.name, self.email),
+        }
     }
 }
