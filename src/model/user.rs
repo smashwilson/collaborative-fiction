@@ -1,8 +1,10 @@
 //! A collaborative fiction user.
 
+use std::fmt::{self, Display, Formatter};
+
 use postgres::Connection;
 
-use model::create_index;
+use model::{create_index, first};
 use error::FictResult;
 
 /// Participant in the collaborative storytelling process. Automatically created on first oauth
@@ -80,5 +82,33 @@ impl User {
         };
 
         Ok(user)
+    }
+
+    /// Find the User with a known ID.
+    ///
+    /// Panic if no such user exists.
+    pub fn with_id(conn: &Connection, id: i64) -> FictResult<User> {
+        let selection = try!(conn.prepare("
+            SELECT id, name, email FROM users
+            WHERE id = $1
+        "));
+
+        let rows = try!(selection.query(&[&id]));
+        let row = try!(first(rows));
+
+        Ok(User{
+            id: Some(row.get(0)),
+            name: row.get(1),
+            email: row.get(2),
+        })
+    }
+}
+
+impl Display for User {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        match self.id {
+            Some(i) => write!(f, "User(id=[{}] name=[{}] email=[{}])", i, self.name, self.email),
+            None => write!(f, "User(*new* name=[{}] email=[{}])", self.name, self.email),
+        }
     }
 }

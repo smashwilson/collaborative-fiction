@@ -13,10 +13,10 @@ use r2d2_postgres::PostgresConnectionManager;
 use error::{FictResult, fict_err};
 
 mod user;
+mod session;
 
 pub use self::user::User;
-
-pub struct Session;
+pub use self::session::Session;
 
 /// Database is the type key used to access the connection pool.
 pub struct Database;
@@ -47,7 +47,10 @@ impl Database {
     fn initialize(pool: &PostgresPool) -> FictResult<()> {
         let conn = try!(pool.get());
 
+        // Reminder to self: this order is not arbitary. It must be organized such that foreign
+        // keys are applied after the table they reference is created.
         try!(User::initialize(&conn));
+        try!(Session::initialize(&conn));
 
         Ok(())
     }

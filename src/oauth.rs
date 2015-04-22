@@ -153,13 +153,13 @@ pub trait Provider : Key + Send + Sync + Clone {
             .and_then(|(code, state)| self.validate_state(&mut *shared, &state).map(|_| { code }))
             .and_then(|code| self.generate_token(code))
             .and_then(|token| self.find_user(&*conn, token))
-            .and_then(|user| self.assign_session(user));
+            .and_then(|user| Session::assign(&*conn, user, &mut shared.rng));
 
         match result {
-            Ok(..) => {
-                debug!("OAuth flow completed. Acquired session.");
+            Ok(session) => {
+                debug!("OAuth flow completed. Acquired {}.", session);
 
-                let output = format!("You've successfully created a session.");
+                let output = format!("You've successfully created a session: [{}]", session.token);
                 Ok(Response::with((status::Ok, output)))
             },
             Err(message) => {
@@ -243,13 +243,6 @@ pub trait Provider : Key + Send + Sync + Clone {
     fn find_user(&self, conn: &Connection, token: String) -> FictResult<User> {
         let (email, username) = try!(self.get_user_data(&token));
         User::find_or_create(conn, email, username)
-    }
-
-    fn assign_session(&self, user: User) -> FictResult<Session> {
-        debug!("Found user: id=[{}] name=[{}] email=[{}]",
-               user.id.unwrap_or(0), user.name, user.email);
-
-        Err(fict_err("Not implemented yet"))
     }
 
     /// Register the routes necessary to support this Provider. Usually, this will involve a
