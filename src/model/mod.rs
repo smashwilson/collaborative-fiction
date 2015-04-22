@@ -47,7 +47,10 @@ impl Database {
     fn initialize(pool: &PostgresPool) -> FictResult<()> {
         let conn = try!(pool.get());
 
+        // Reminder to self: this order is not arbitary. It must be organized such that foreign
+        // keys are applied after the table they reference is created.
         try!(User::initialize(&conn));
+        try!(Session::initialize(&conn));
 
         Ok(())
     }
