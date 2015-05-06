@@ -1,10 +1,9 @@
 //! OAuth2 authentication providers.
 
+use std::io::Read;
 use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
-use std::io::Read;
 use std::error::Error;
-use std::borrow::ToOwned;
 
 use iron::prelude::*;
 use iron::status;
@@ -17,13 +16,18 @@ use persistent::Write;
 use rand::{OsRng, Rng};
 use hyper::Client;
 use hyper::Url as HyperUrl;
-use hyper::header::{Accept, Authorization, UserAgent, qitem};
+use hyper::header::{Accept, qitem};
 use hyper::mime::{Mime, TopLevel, SubLevel};
-use rustc_serialize::json::{self, Json};
+use rustc_serialize::json;
 use postgres::Connection;
 
 use error::{FictResult, fict_err, as_fict_err};
 use model::{Database, User, Session};
+
+mod connection;
+mod github;
+
+pub use self::github::GitHub;
 
 /// Initial size of the "valid state parameter" pool.
 const INIT_STATE_CAPACITY: usize = 100;
@@ -68,6 +72,30 @@ impl Shared {
     /// Verify that a given state is valid. Discard it from the provider's store if it is.
     fn validate_state(&mut self, state: &str) -> bool {
         self.valid_states.remove(state)
+    }
+
+}
+
+struct RequestHandler<P: Provider> {
+    provider: P
+}
+
+impl <P: Provider> Handler for RequestHandler<P> {
+
+    fn handle(&self, r: &mut Request) -> IronResult<Response> {
+        self.provider.request_handler(r)
+    }
+
+}
+
+struct CallbackHandler<P: Provider> {
+    provider: P
+}
+
+impl <P: Provider> Handler for CallbackHandler<P> {
+
+    fn handle(&self, r: &mut Request) -> IronResult<Response> {
+        self.provider.callback_handler(r)
     }
 
 }
@@ -253,150 +281,4 @@ pub trait Provider : Key + Send + Sync + Clone {
         router.get(self.callback_glob(), CallbackHandler{provider: self.clone()});
     }
 
-}
-
-struct RequestHandler<P: Provider> {
-    provider: P
-}
-
-impl <P: Provider> Handler for RequestHandler<P> {
-
-    fn handle(&self, r: &mut Request) -> IronResult<Response> {
-        self.provider.request_handler(r)
-    }
-
-}
-
-struct CallbackHandler<P: Provider> {
-    provider: P
-}
-
-impl <P: Provider> Handler for CallbackHandler<P> {
-
-    fn handle(&self, r: &mut Request) -> IronResult<Response> {
-        self.provider.callback_handler(r)
-    }
-
-}
-
-/// Custom user agent to use for outgoing requests.
-const USER_AGENT: &'static str = "collabfict/0.0.1 hyper/0.3.13 rust/1.0.0-beta.2";
-
-/// Manage a connection to an HTTPS API that accepts and produces JSON documents.
-struct JsonConnection {
-    client: Client,
-    auth: Authorization<String>,
-}
-
-impl JsonConnection {
-
-    fn new(auth_method: &str, token: &str) -> JsonConnection {
-        let auth_body = format!("{} {}", auth_method, token);
-
-        JsonConnection{
-            client: Client::new(),
-            auth: Authorization(auth_body)
-        }
-    }
-
-    fn get(&mut self, url: &str) -> FictResult<Json> {
-        let mut req = self.client.get(url);
-        req = req.header(self.auth.clone());
-        req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
-        req = req.header(UserAgent(USER_AGENT.to_owned()));
-
-        let mut resp = try!(req.send());
-
-        let mut resp_body = String::new();
-        try!(resp.read_to_string(&mut resp_body));
-
-        Json::from_str(&resp_body)
-            .map_err(|e| From::from(e) )
-    }
-
-}
-
-/// Implement OAuth for GitHub.
-#[derive(Clone)]
-pub struct GitHub {
-    options: Options,
-}
-
-impl GitHub {
-
-    pub fn new(root: &'static str, id: String, secret: String) -> GitHub {
-        GitHub{
-            options: Options{
-                name: "github",
-                root: root,
-                client_id: id,
-                client_secret: secret,
-                request_uri: IronUrl::parse("https://github.com/login/oauth/authorize").unwrap(),
-                token_uri: HyperUrl::parse("https://github.com/login/oauth/access_token").unwrap(),
-            }
-        }
-    }
-
-}
-
-impl Key for GitHub {
-
-    type Value = Shared;
-
-}
-
-impl Provider for GitHub {
-
-    fn options(&self) -> &Options {
-        &self.options
-    }
-
-    fn shared_mutex(&self, req: &mut Request) -> Arc<Mutex<Shared>> {
-        req.get::<Write<GitHub>>().unwrap_or_else(|_| {
-            panic!("Shared GitHub content not found.");
-        })
-    }
-
-    fn scopes(&self) -> &'static str {
-        "user:email"
-    }
-
-    fn get_user_data(&self, token: &str) -> FictResult<(String, String)> {
-        debug!("Acquiring user profile from GitHub.");
-
-        let mut conn = JsonConnection::new("token", token);
-
-        let profile_doc = try!(conn.get("https://api.github.com/user"));
-
-        let username = try!(profile_doc.find("login")
-            .and_then(|login| login.as_string())
-            .ok_or(fict_err("GitHub profile element 'login' was not a string")));
-
-        match profile_doc.find("email") {
-            Some(&Json::String(ref public_email)) => {
-                debug!("Discovered public email {} in GitHub profile.", public_email);
-                return Ok((public_email.to_owned(), username.to_owned()));
-            },
-            Some(&Json::Null) => (),
-            _ => return Err(fict_err("GitHub profile element 'email' was not a string or null")),
-        }
-
-        debug!("Profile email is not public. Requesting email address resource.");
-
-        let email_doc = try!(conn.get("https://api.github.com/user/emails"));
-
-        let emails = try!(email_doc.as_array()
-            .ok_or(fict_err("GitHub email document root was not an array")));
-
-        let primary_email = try!(emails.iter()
-            .find(|doc| doc.find("primary").and_then(|n| n.as_boolean()).unwrap_or(false))
-            .and_then(|doc| doc.find("email").and_then(|n| n.as_string()))
-            .ok_or(fict_err("No primary email specified")));
-
-        return Ok((primary_email.to_owned(), username.to_owned()));
-    }
-
-    fn link(&self, chain: &mut Chain) {
-        chain.link_before(Write::<GitHub>::one(Shared::new()));
-    }
 }
