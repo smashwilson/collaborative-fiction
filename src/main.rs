@@ -14,6 +14,7 @@ extern crate url;
 extern crate postgres;
 extern crate r2d2;
 extern crate r2d2_postgres;
+extern crate plugin;
 
 use std::env;
 use std::process;
