@@ -80,6 +80,11 @@ impl Story {
         Ok(story)
     }
 
+    /// Determine the level of access granted to a given `User`.
+    pub fn access_for(&self, conn: &Connection, user: &User) -> FictResult<AccessLevel> {
+        StoryAccess::access_for(conn, user, &self)
+    }
+
 }
 
 /// Level of access granted to a specific `User` on a `Story`.
