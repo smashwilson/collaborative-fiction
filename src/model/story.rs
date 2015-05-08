@@ -83,7 +83,13 @@ impl Story {
 
     /// Determine the level of access granted to a given `User`.
     pub fn access_for(&self, conn: &Connection, user: &User) -> FictResult<AccessLevel> {
-        StoryAccess::access_for(conn, user, &self)
+        let access = try!(StoryAccess::access_for(conn, user, &self));
+
+        Ok(if (self.published && self.world_readable) {
+            access.upgrade_to_read()
+        } else {
+            access
+        })
     }
 
 }
