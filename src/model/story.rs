@@ -1,4 +1,5 @@
 use std::fmt::{self, Display, Formatter};
+use std::borrow::ToOwned;
 
 use postgres::Connection;
 use time::Timespec;
@@ -115,6 +116,42 @@ impl AccessLevel {
             2 => Ok(AccessLevel::Writer),
             3 => Ok(AccessLevel::Owner),
             _ => Err(fict_err(format!("Invalid encoded access level [{}]", value)))
+        }
+    }
+
+    /// Return true if `user` is permitted to know the existence of this `Story` in search
+    /// results and so on.
+    pub fn grants_read(&self, user: &User) -> bool {
+        match *self {
+            AccessLevel::Reader | AccessLevel::Writer | AccessLevel::Owner => true,
+            _ => false
+        }
+    }
+
+    /// Return true if `user` is allowed to contribute `Snippets` to this `Story`.
+    pub fn grants_write(&self, user: &User) -> bool {
+        match *self {
+            AccessLevel::Writer | AccessLevel::Owner => true,
+            _ => false
+        }
+    }
+
+    /// Return true if `user` should be able to grant and revoke access to other `Users`,
+    /// determine when the `Story` is published, set or modify the title, or delete the story
+    /// entirely.
+    pub fn grants_admin(&self, user: &User) -> bool {
+        match *self {
+            AccessLevel::Owner => true,
+            _ => false
+        }
+    }
+
+    /// Return a new AccessLevel that grants at least Reader access, but preserves higher access
+    /// levels if granted.
+    pub fn upgrade_to_read(self) -> AccessLevel {
+        match self {
+            AccessLevel::NoAccess => AccessLevel::Reader,
+            _ => self
         }
     }
 
