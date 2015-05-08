@@ -53,8 +53,6 @@ impl Story {
     /// Create and persist a new `Story`. The provided `User` will be granted Owner-level access
     /// to the story.
     pub fn begin(conn: &Connection, owner: &User) -> FictResult<Story> {
-        let trans = try!(conn.transaction());
-
         let insertion = try!(conn.prepare("
             INSERT INTO stories DEFAULT VALUES
             RETURNING (id, title, published, world_readable, creation_time, update_time,
@@ -78,8 +76,6 @@ impl Story {
 
         // Automatically grant Owner access to the creating user.
         try!(StoryAccess::grant(conn, &story, owner, &AccessLevel::Owner));
-
-        try!(trans.finish());
 
         Ok(story)
     }
@@ -176,8 +172,6 @@ impl StoryAccess {
             _ => ()
         }
 
-        let trans = try!(conn.transaction());
-
         let update = try!(conn.prepare("
             UPDATE story_access
             SET access_level_code = $1
@@ -198,8 +192,6 @@ impl StoryAccess {
             VALUES ($1, $2, $3)
         "));
         try!(insertion.execute(&[&access_level_code, &story.id, &user.id]));
-
-        try!(trans.finish());
 
         Ok(())
     }
