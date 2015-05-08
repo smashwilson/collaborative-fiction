@@ -31,6 +31,8 @@ mod error;
 mod oauth;
 mod model;
 
+mod auth;
+
 /// Respond with a simple string on `/` to be able to quickly check if it's up.
 fn health_check(_: &mut Request) -> IronResult<Response> {
     info!("Health check request.");
