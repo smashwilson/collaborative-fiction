@@ -3,7 +3,7 @@ use std::fmt::{self, Display, Formatter};
 use postgres::Connection;
 use time::Timespec;
 
-use model::{create_index, first};
+use model::{create_index, first, Story};
 use error::{FictResult, fict_err};
 
 /// Single submission to an ongoing `Story`.

@@ -3,7 +3,7 @@ use std::fmt::{self, Display, Formatter};
 use postgres::Connection;
 use time::Timespec;
 
-use model::{create_index, first};
+use model::{create_index, first, User};
 use error::{FictResult, fict_err};
 
 /// An ordered sequence of Snippets that combine to form a (hopefully) hilarious piece of fiction.
@@ -29,10 +29,12 @@ impl Story {
             CREATE TABLE IF NOT EXISTS stories (
                 id BIGSERIAL PRIMARY KEY,
                 title VARCHAR,
-                published BOOLEAN NOT NULL,
-                world_readable BOOLEAN NOT NULL,
-                creation_time TIMESTAMP WITH TIME ZONE NOT NULL,
-                update_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                published BOOLEAN NOT NULL DEFAULT false,
+                world_readable BOOLEAN NOT NULL DEFAULT false,
+                creation_time TIMESTAMP WITH TIME ZONE NOT NULL
+                    DEFAULT (now() AT TIME ZONE 'utc'),
+                update_time TIMESTAMP WITH TIME ZONE NOT NULL
+                    DEFAULT (now() AT TIME ZONE 'utc'),
                 publish_time TIMESTAMP WITH TIME ZONE,
                 lock_user_id BIGINT REFERENCES users (id)
                     ON DELETE SET NULL
@@ -46,6 +48,40 @@ impl Story {
         ));
 
         Ok(())
+    }
+
+    /// Create and persist a new `Story`. The provided `User` will be granted Owner-level access
+    /// to the story.
+    pub fn begin(conn: &Connection, owner: &User) -> FictResult<Story> {
+        let trans = try!(conn.transaction());
+
+        let insertion = try!(conn.prepare("
+            INSERT INTO stories DEFAULT VALUES
+            RETURNING (id, title, published, world_readable, creation_time, update_time,
+                       publish_time, lock_user_id, lock_expiration)
+        "));
+
+        let rows = try!(insertion.query(&[]));
+        let row = try!(first(rows));
+
+        let story = Story{
+            id: row.get(0),
+            title: row.get(1),
+            published: row.get(2),
+            world_readable: row.get(3),
+            creation_time: row.get(4),
+            update_time: row.get(5),
+            publish_time: row.get(6),
+            lock_user_id: row.get(7),
+            lock_expiration: row.get(8)
+        };
+
+        // Automatically grant Owner access to the creating user.
+        try!(StoryAccess::grant(conn, &story, owner, &AccessLevel::Owner));
+
+        try!(trans.finish());
+
+        Ok(story)
     }
 
 }
@@ -106,6 +142,8 @@ impl StoryAccess {
                 user_id BIGINT NOT NULL REFERENCES users (id)
                     ON DELETE CASCADE
                     ON UPDATE CASCADE,
+                access_level_code INT NOT NULL,
+                UNIQUE (user_id, story_id)
             )
         ", &[]));
 
@@ -116,6 +154,48 @@ impl StoryAccess {
         try!(create_index(conn, "story_access_user_id_index",
             "CREATE INDEX story_access_user_id_index ON story_access (user_id)"
         ));
+
+        Ok(())
+    }
+
+    /// Grant a `User` access to a `Story` at a specified level. If level is `NoAccess`, any
+    /// access will be removed.
+    pub fn grant(conn: &Connection, story: &Story, user: &User, level: &AccessLevel) -> FictResult<()> {
+        match *level {
+            AccessLevel::NoAccess => {
+                // Revoke any existing access instead.
+                let deletion = try!(conn.prepare("
+                    DELETE FROM story_access
+                    WHERE story_id = $1 AND user_id = $2
+                "));
+
+                try!(deletion.execute(&[&story.id, &user.id]));
+
+                return Ok(());
+            },
+            _ => ()
+        }
+
+        let update = try!(conn.prepare("
+            UPDATE story_access
+            SET access_level_code = $1
+            WHERE story_id = $2 AND user_id = $3
+        "));
+
+        let access_level_code = level.encode();
+
+        let count = try!(update.execute(&[&access_level_code, &story.id, &user.id]));
+
+        if count >= 1 {
+            return Ok(())
+        }
+
+        // No existing access. Insert a new row, instead.
+        let insertion = try!(conn.prepare("
+            INSERT INTO story_access (access_level_code, story_id, user_id)
+            VALUES ($1, $2, $3)
+        "));
+        try!(insertion.execute(&[&access_level_code, &story.id, &user.id]));
 
         Ok(())
     }
