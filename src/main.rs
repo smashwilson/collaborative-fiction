@@ -31,6 +31,10 @@ mod error;
 mod oauth;
 mod model;
 
+mod auth;
+
+mod whoami;
+
 /// Respond with a simple string on `/` to be able to quickly check if it's up.
 fn health_check(_: &mut Request) -> IronResult<Response> {
     info!("Health check request.");
@@ -56,6 +60,7 @@ fn launch() -> FictResult<()> {
     let mut router = Router::new();
     router.get("/", health_check);
     github.route(&mut router);
+    whoami::route(&mut router);
 
     let mut chain = Chain::new(router);
     try!(Database::link(&mut chain));
