@@ -176,6 +176,8 @@ impl StoryAccess {
             _ => ()
         }
 
+        let trans = try!(conn.transaction());
+
         let update = try!(conn.prepare("
             UPDATE story_access
             SET access_level_code = $1
@@ -196,6 +198,8 @@ impl StoryAccess {
             VALUES ($1, $2, $3)
         "));
         try!(insertion.execute(&[&access_level_code, &story.id, &user.id]));
+
+        try!(trans.finish());
 
         Ok(())
     }
