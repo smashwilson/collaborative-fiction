@@ -8,7 +8,7 @@ use error::{FictResult, fict_err};
 
 /// An ordered sequence of Snippets that combine to form a (hopefully) hilarious piece of fiction.
 pub struct Story {
-    pub id: Option<i64>,
+    pub id: i64,
     pub title: Option<String>,
     pub published: bool,
     pub world_readable: bool,
@@ -117,7 +117,7 @@ impl AccessLevel {
 
 /// Associates a level of access to a `Story` with a `User`.
 pub struct StoryAccess {
-    pub id: Option<i64>,
+    pub id: i64,
     pub story_id: i64,
     pub user_id: i64,
     pub access_level: AccessLevel
