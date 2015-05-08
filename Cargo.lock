@@ -14,6 +14,7 @@ dependencies = [
  "rand 0.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "router 0.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
  "url 0.2.30 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -263,6 +264,7 @@ dependencies = [
  "phf 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "phf_codegen 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustc-serialize 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
