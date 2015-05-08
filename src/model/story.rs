@@ -3,7 +3,7 @@ use std::fmt::{self, Display, Formatter};
 use postgres::Connection;
 use time::Timespec;
 
-use model::{create_index, first, User};
+use model::{create_index, first, first_opt, User};
 use error::{FictResult, fict_err};
 
 /// An ordered sequence of Snippets that combine to form a (hopefully) hilarious piece of fiction.
@@ -194,6 +194,22 @@ impl StoryAccess {
         try!(insertion.execute(&[&access_level_code, &story.id, &user.id]));
 
         Ok(())
+    }
+
+    /// Determine the current access level that a `User` has on a `Story`.
+    fn access_for(conn: &Connection, user: &User, story: &Story) -> FictResult<AccessLevel> {
+        let locate = try!(conn.prepare("
+            SELECT access_level_code
+            FROM story_access
+            WHERE user_id = $1 AND story_id = $2
+        "));
+
+        let rows = try!(locate.query(&[&user.id, &story.id]));
+        let row_opt = try!(first_opt(rows));
+
+        row_opt
+            .map(|row| AccessLevel::decode(row.get(0)))
+            .unwrap_or(Ok(AccessLevel::NoAccess))
     }
 
 }
