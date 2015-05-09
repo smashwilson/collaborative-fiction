@@ -1,6 +1,3 @@
-use std::fmt::{self, Display, Formatter};
-use std::borrow::ToOwned;
-
 use postgres::Connection;
 use time::Timespec;
 
@@ -112,7 +109,7 @@ impl Story {
     pub fn access_for(&self, conn: &Connection, user: &User) -> FictResult<AccessLevel> {
         let access = try!(StoryAccess::access_for(conn, user, &self));
 
-        Ok(if (self.published && self.world_readable) {
+        Ok(if self.published && self.world_readable {
             access.upgrade_to_read()
         } else {
             access

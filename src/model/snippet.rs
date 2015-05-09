@@ -1,10 +1,8 @@
-use std::fmt::{self, Display, Formatter};
-
 use postgres::Connection;
 use time::Timespec;
 
 use model::{create_index, first, Story, User};
-use error::{FictResult, fict_err};
+use error::FictResult;
 
 /// Single submission to an ongoing `Story`.
 pub struct Snippet {

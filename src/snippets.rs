@@ -1,6 +1,6 @@
 //! Snippet creation endpoints.
 
-use iron::{Request, Response, IronResult, IronError, Chain};
+use iron::{Request, Response, IronResult, Chain};
 use iron::status;
 use router::Router;
 use persistent::{Read, Write};
