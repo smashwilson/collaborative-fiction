@@ -20,7 +20,17 @@ use error::FictError::{Message, Cause};
 #[derive(Debug)]
 pub enum FictError {
     Message(String),
-    Cause(Box<Error>),
+    Cause(Box<Error + Send>),
+}
+
+impl FictError {
+
+    /// Consume a FictError to produce an IronError that wraps it and produces the appropriate HTTP
+    /// status code.
+    pub fn iron(self, status: iron::status::Status) -> iron::IronError {
+        iron::IronError::new(self, status)
+    }
+
 }
 
 impl Error for FictError {
@@ -68,7 +78,7 @@ impl NonFictError for rustc_serialize::json::DecoderError {}
 impl NonFictError for rustc_serialize::json::EncoderError {}
 impl NonFictError for rustc_serialize::json::ParserError {}
 
-impl<E: NonFictError + 'static> From<E> for FictError {
+impl<E: NonFictError + Send + 'static> From<E> for FictError {
     fn from(err: E) -> FictError {
         FictError::Cause(Box::new(err))
     }

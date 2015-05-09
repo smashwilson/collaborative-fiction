@@ -7,6 +7,7 @@ extern crate env_logger;
 extern crate iron;
 extern crate router;
 extern crate persistent;
+extern crate bodyparser;
 extern crate rand;
 extern crate hyper;
 extern crate rustc_serialize;
@@ -15,6 +16,7 @@ extern crate postgres;
 extern crate r2d2;
 extern crate r2d2_postgres;
 extern crate plugin;
+extern crate time;
 
 use std::env;
 use std::process;
@@ -34,6 +36,7 @@ mod model;
 mod auth;
 
 mod whoami;
+mod snippets;
 
 /// Respond with a simple string on `/` to be able to quickly check if it's up.
 fn health_check(_: &mut Request) -> IronResult<Response> {
@@ -61,6 +64,7 @@ fn launch() -> FictResult<()> {
     router.get("/", health_check);
     github.route(&mut router);
     whoami::route(&mut router);
+    snippets::route(&mut router);
 
     let mut chain = Chain::new(router);
     try!(Database::link(&mut chain));

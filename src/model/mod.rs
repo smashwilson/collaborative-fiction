@@ -14,9 +14,13 @@ use error::{FictResult, fict_err};
 
 mod user;
 mod session;
+mod story;
+mod snippet;
 
 pub use self::user::User;
 pub use self::session::Session;
+pub use self::story::{Story, StoryAccess, AccessLevel};
+pub use self::snippet::Snippet;
 
 /// Database is the type key used to access the connection pool.
 pub struct Database;
@@ -51,6 +55,9 @@ impl Database {
         // keys are applied after the table they reference is created.
         try!(User::initialize(&conn));
         try!(Session::initialize(&conn));
+        try!(Story::initialize(&conn));
+        try!(StoryAccess::initialize(&conn));
+        try!(Snippet::initialize(&conn));
 
         Ok(())
     }

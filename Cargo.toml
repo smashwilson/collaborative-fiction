@@ -14,11 +14,16 @@ env_logger = "*"
 iron = "*"
 router = "*"
 persistent = "*"
+bodyparser = "*"
 rand = "*"
 hyper = "*"
 rustc-serialize = "*"
 url = "*"
-postgres = "*"
 r2d2 = "*"
 r2d2_postgres = "*"
 plugin = "*"
+time = "*"
+
+[dependencies.postgres]
+version = "*"
+features = ["time"]
