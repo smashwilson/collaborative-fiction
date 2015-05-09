@@ -81,6 +81,33 @@ impl Story {
         Ok(story)
     }
 
+    /// Search for an existing `Story` by ID.
+    pub fn with_id(conn: &Connection, id: i64) -> FictResult<Option<Story>> {
+        let selection = try!(conn.prepare("
+            SELECT
+                id, title, published, world_readable, creation_time, update_time, publish_time,
+                lock_user_id, lock_expiration
+            FROM stories
+            WHERE id = $1
+        "));
+
+        let rows = try!(selection.query(&[&id]));
+        let row_opt = try!(first_opt(rows));
+
+        Ok(row_opt
+            .map(|row| Story{
+                id: row.get(0),
+                title: row.get(1),
+                published: row.get(2),
+                world_readable: row.get(3),
+                creation_time: row.get(4),
+                update_time: row.get(5),
+                publish_time: row.get(6),
+                lock_user_id: row.get(7),
+                lock_expiration: row.get(8)
+            }))
+    }
+
     /// Determine the level of access granted to a given `User`.
     pub fn access_for(&self, conn: &Connection, user: &User) -> FictResult<AccessLevel> {
         let access = try!(StoryAccess::access_for(conn, user, &self));
