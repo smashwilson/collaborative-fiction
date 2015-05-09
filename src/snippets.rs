@@ -1,19 +1,16 @@
 //! Snippet creation endpoints.
 
-use std::borrow::ToOwned;
-
 use iron::{Request, Response, IronResult, IronError, Chain};
 use iron::status;
 use router::Router;
 use persistent::{Read, Write};
 use bodyparser;
-use rustc_serialize::json;
 use plugin::Pluggable;
 use plugin::Extensible;
 
 use model::{Database, Snippet, Story, AccessLevel};
 use auth::{AuthUser, RequireUser};
-use error::{fict_err, as_fict_err, FictError};
+use error::FictError;
 
 #[derive(Debug, Clone, RustcEncodable, RustcDecodable)]
 struct CreationBody {
@@ -27,7 +24,8 @@ struct SnippetBody {
 }
 
 pub fn post(req: &mut Request) -> IronResult<Response> {
-    let u = req.extensions().get::<AuthUser>().unwrap().to_owned();
+    let u = req.extensions().get::<AuthUser>().cloned()
+        .expect("No authenticated user");
 
     let body = match req.get::<bodyparser::Struct<CreationBody>>() {
         Ok(Some(b)) => b,

@@ -9,6 +9,7 @@ use error::FictResult;
 
 /// Participant in the collaborative storytelling process. Automatically created on first oauth
 /// login.
+#[derive(Clone)]
 pub struct User {
     pub id: Option<i64>,
     pub name: String,
