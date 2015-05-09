@@ -2,6 +2,7 @@
 name = "collabfict"
 version = "0.0.1"
 dependencies = [
+ "bodyparser 0.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "iron 0.1.16 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -22,6 +23,17 @@ dependencies = [
 name = "bitflags"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "bodyparser"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "iron 0.1.16 (registry+https://github.com/rust-lang/crates.io-index)",
+ "persistent 0.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "plugin 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustc-serialize 0.3.12 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "byteorder"
