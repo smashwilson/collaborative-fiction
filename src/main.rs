@@ -7,6 +7,7 @@ extern crate env_logger;
 extern crate iron;
 extern crate router;
 extern crate persistent;
+extern crate bodyparser;
 extern crate rand;
 extern crate hyper;
 extern crate rustc_serialize;
