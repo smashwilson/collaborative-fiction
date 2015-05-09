@@ -8,9 +8,8 @@ use bodyparser;
 use plugin::Pluggable;
 use plugin::Extensible;
 
-use model::{Database, Snippet, Story, AccessLevel};
+use model::{Database, Snippet, Story};
 use auth::{AuthUser, RequireUser};
-use error::FictError;
 
 #[derive(Debug, Clone, RustcEncodable, RustcDecodable)]
 struct CreationBody {
@@ -55,15 +54,15 @@ pub fn post(req: &mut Request) -> IronResult<Response> {
                 None => return Ok(Response::with(("No such story", status::NotFound))),
             };
 
-            let access: AccessLevel = try!(story.access_for(&*conn, &u)
-                .map_err(|err: FictError| err.iron(status::InternalServerError)));
+            let access = try!(story.access_for(&*conn, &u)
+                .map_err(|err| err.iron(status::InternalServerError)));
 
             if ! access.grants_write() {
                 return Ok(Response::with(("No such story", status::NotFound)));
             }
 
             try!(Snippet::contribute(&*conn, &story, &u, body.snippet.content)
-                .map_err(|err: FictError| err.iron(status::InternalServerError)));
+                .map_err(|err| err.iron(status::InternalServerError)));
 
             Ok(Response::with(status::Created))
         },
