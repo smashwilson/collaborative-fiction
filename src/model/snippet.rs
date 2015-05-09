@@ -61,7 +61,7 @@ impl Snippet {
         let insertion = try!(conn.prepare("
             INSERT INTO snippets (user_id, story_id, content)
             VALUES ($1, $2, $3)
-            RETURNING (id, ordinal, creation_time)
+            RETURNING id, ordinal, creation_time
         "));
 
         let rows = try!(insertion.query(&[&contributor_id, &story.id, &content]));

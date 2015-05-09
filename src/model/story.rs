@@ -53,8 +53,8 @@ impl Story {
     pub fn begin(conn: &Connection, owner: &User) -> FictResult<Story> {
         let insertion = try!(conn.prepare("
             INSERT INTO stories DEFAULT VALUES
-            RETURNING (id, title, published, world_readable, creation_time, update_time,
-                       publish_time, lock_user_id, lock_expiration)
+            RETURNING id, title, published, world_readable, creation_time, update_time,
+                      publish_time, lock_user_id, lock_expiration
         "));
 
         let rows = try!(insertion.query(&[]));
