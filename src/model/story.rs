@@ -152,27 +152,27 @@ impl AccessLevel {
         }
     }
 
-    /// Return true if `user` is permitted to know the existence of this `Story` in search
+    /// Return true if this level permits users to know the existence of this `Story` in search
     /// results and so on.
-    pub fn grants_read(&self, user: &User) -> bool {
+    pub fn grants_read(&self) -> bool {
         match *self {
             AccessLevel::Reader | AccessLevel::Writer | AccessLevel::Owner => true,
             _ => false
         }
     }
 
-    /// Return true if `user` is allowed to contribute `Snippets` to this `Story`.
-    pub fn grants_write(&self, user: &User) -> bool {
+    /// Return true if this level allows a user to contribute `Snippets` to this `Story`.
+    pub fn grants_write(&self) -> bool {
         match *self {
             AccessLevel::Writer | AccessLevel::Owner => true,
             _ => false
         }
     }
 
-    /// Return true if `user` should be able to grant and revoke access to other `Users`,
-    /// determine when the `Story` is published, set or modify the title, or delete the story
-    /// entirely.
-    pub fn grants_admin(&self, user: &User) -> bool {
+    /// Return true if a user with this level should be able to grant and revoke access to other
+    /// `Users`, determine when the `Story` is published, set or modify the title, or delete the
+    /// story entirely.
+    pub fn grants_admin(&self) -> bool {
         match *self {
             AccessLevel::Owner => true,
             _ => false
