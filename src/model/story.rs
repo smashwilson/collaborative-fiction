@@ -37,7 +37,7 @@ impl Story {
                 lock_user_id BIGINT REFERENCES users (id)
                     ON DELETE SET NULL
                     ON UPDATE CASCADE,
-                lock_expiration TIMESTAMP WITH TIME ZONE,
+                lock_expiration TIMESTAMP WITH TIME ZONE
             )
         ", &[]));
 

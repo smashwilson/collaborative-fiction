@@ -7,7 +7,7 @@ use error::FictResult;
 /// Single submission to an ongoing `Story`.
 pub struct Snippet {
     pub id: i64,
-    pub order: i32,
+    pub ordinal: i32,
     pub user_id: i64,
     pub story_id: i64,
     pub creation_time: Timespec,
@@ -23,7 +23,7 @@ impl Snippet {
         try!(conn.execute("
             CREATE TABLE IF NOT EXISTS snippets (
                 id BIGSERIAL PRIMARY KEY,
-                order SERIAL NOT NULL,
+                ordinal SERIAL NOT NULL,
                 user_id BIGINT REFERENCES users (id)
                     ON DELETE SET NULL
                     ON UPDATE CASCADE,
@@ -61,7 +61,7 @@ impl Snippet {
         let insertion = try!(conn.prepare("
             INSERT INTO snippets (user_id, story_id, content)
             VALUES ($1, $2, $3)
-            RETURNING (id, order, creation_time)
+            RETURNING (id, ordinal, creation_time)
         "));
 
         let rows = try!(insertion.query(&[&contributor_id, &story.id, &content]));
@@ -69,7 +69,7 @@ impl Snippet {
 
         Ok(Snippet{
             id: row.get(0),
-            order: row.get(1),
+            ordinal: row.get(1),
             user_id: contributor_id,
             story_id: story.id,
             creation_time: row.get(2),
