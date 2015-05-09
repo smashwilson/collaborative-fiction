@@ -64,6 +64,7 @@ fn launch() -> FictResult<()> {
     router.get("/", health_check);
     github.route(&mut router);
     whoami::route(&mut router);
+    snippets::route(&mut router);
 
     let mut chain = Chain::new(router);
     try!(Database::link(&mut chain));
