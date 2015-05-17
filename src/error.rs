@@ -73,7 +73,7 @@ impl NonFictError for postgres::Error {}
 impl NonFictError for postgres::ConnectError {}
 impl NonFictError for r2d2::InitializationError {}
 impl NonFictError for r2d2::GetTimeout {}
-impl NonFictError for hyper::HttpError {}
+impl NonFictError for hyper::Error {}
 impl NonFictError for rustc_serialize::json::DecoderError {}
 impl NonFictError for rustc_serialize::json::EncoderError {}
 impl NonFictError for rustc_serialize::json::ParserError {}
