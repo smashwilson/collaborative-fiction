@@ -87,10 +87,16 @@ impl BeforeMiddleware for RequireUser {
 
                         Ok(())
                     },
-                    None => Err(AuthError::iron()),
+                    None => {
+                        debug!("Invalid session");
+                        Err(AuthError::iron())
+                    },
                 }
             },
-            None => Err(AuthError::iron()),
+            None => {
+                debug!("No authorization header found");
+                Err(AuthError::iron())
+            },
         }
     }
 
