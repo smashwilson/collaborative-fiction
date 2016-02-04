@@ -9,7 +9,7 @@ use rustc_serialize::json::Json;
 use error::FictResult;
 
 /// Custom user agent to use for outgoing requests.
-const USER_AGENT: &'static str = "collabfict/0.0.1 hyper/0.3.13 rust/1.0.0-beta.2";
+const USER_AGENT: &'static str = "collabfict/0.0.1 hyper/0.3.13 rust/1.6.0";
 
 /// Manage a connection to an HTTPS API that accepts and produces JSON documents.
 pub struct JsonConnection {
