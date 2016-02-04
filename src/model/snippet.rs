@@ -65,7 +65,7 @@ impl Snippet {
         "));
 
         let rows = try!(insertion.query(&[&contributor_id, &story.id, &content]));
-        let row = try!(first(rows));
+        let row = try!(first(&rows));
 
         Ok(Snippet{
             id: row.get(0),

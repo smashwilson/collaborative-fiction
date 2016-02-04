@@ -97,7 +97,7 @@ impl User {
         "));
 
         let rows = try!(selection.query(&[&id]));
-        let row = try!(first(rows));
+        let row = try!(first(&rows));
 
         Ok(User{
             id: Some(row.get(0)),

@@ -48,7 +48,7 @@ impl Session {
             RETURNING id
         "));
         let rows = try!(insertion.query(&[&token, &user_id]));
-        let row = try!(first(rows));
+        let row = try!(first(&rows));
 
         Ok(Session{
             id: row.get(0),
@@ -67,7 +67,7 @@ impl Session {
         "));
 
         let rows = try!(selection.query(&[&token]));
-        let row_opt = try!(first_opt(rows));
+        let row_opt = try!(first_opt(&rows));
 
         Ok(row_opt.map(|row| Session{
             id: row.get(0),

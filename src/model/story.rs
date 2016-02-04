@@ -58,7 +58,7 @@ impl Story {
         "));
 
         let rows = try!(insertion.query(&[]));
-        let row = try!(first(rows));
+        let row = try!(first(&rows));
 
         let story = Story{
             id: row.get(0),
@@ -89,7 +89,7 @@ impl Story {
         "));
 
         let rows = try!(selection.query(&[&id]));
-        let row_opt = try!(first_opt(rows));
+        let row_opt = try!(first_opt(&rows));
 
         Ok(row_opt
             .map(|row| Story{
@@ -277,7 +277,7 @@ impl StoryAccess {
         "));
 
         let rows = try!(locate.query(&[&user.id, &story.id]));
-        let row_opt = try!(first_opt(rows));
+        let row_opt = try!(first_opt(&rows));
 
         row_opt
             .map(|row| AccessLevel::decode(row.get(0)))
