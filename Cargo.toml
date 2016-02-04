@@ -25,5 +25,5 @@ plugin = "*"
 time = "*"
 
 [dependencies.postgres]
-version = "*"
+version = "0.11"
 features = ["time"]

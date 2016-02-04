@@ -7,6 +7,7 @@ use iron::Chain;
 use iron::typemap::Key;
 use persistent::Write;
 use postgres::{self, Connection, SslMode};
+use postgres::rows::{Rows, Row};
 use r2d2::{LoggingErrorHandler, Pool};
 use r2d2_postgres::PostgresConnectionManager;
 
@@ -66,7 +67,7 @@ impl Database {
 
 /// Expect exactly zero or one results from a SQL query. Produce an error if more than one row was
 /// returned.
-fn first_opt(results: postgres::Rows) -> FictResult<Option<postgres::Row>> {
+fn first_opt(results: Rows) -> FictResult<Option<Row>> {
     let mut it = results.into_iter();
     let first = it.next();
 
@@ -78,7 +79,7 @@ fn first_opt(results: postgres::Rows) -> FictResult<Option<postgres::Row>> {
 
 /// Execute a SQL statement that is expected to return exactly one result. Produces an
 /// error if zero or more than one results are returned, or if the underlying query produces any.
-fn first(results: postgres::Rows) -> FictResult<postgres::Row> {
+fn first(results: Rows) -> FictResult<Row> {
     first_opt(results)
         .and_then(|r| r.ok_or(fict_err("Expected at least one result, but zero were returned")))
 }
@@ -92,7 +93,7 @@ fn create_index(conn: &Connection, name: &str, sql: &str) -> FictResult<()> {
     let existing_result = try!(existing_stmt.query(&[]));
     let row = try!(first(existing_result));
     let exists = match row.get_opt::<usize, String>(0) {
-        Err(postgres::Error::WasNull) => false,
+        Err(postgres::error::Error::Conversion) => false,
         Err(e) => return Err(From::from(e)),
         _ => true,
     };
