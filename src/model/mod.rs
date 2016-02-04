@@ -6,10 +6,10 @@ use std::default::Default;
 use iron::Chain;
 use iron::typemap::Key;
 use persistent::Write;
-use postgres::{self, Connection, SslMode};
+use postgres::{self, Connection};
 use postgres::rows::{Rows, Row};
 use r2d2::{LoggingErrorHandler, Pool};
-use r2d2_postgres::PostgresConnectionManager;
+use r2d2_postgres::{PostgresConnectionManager, SslMode};
 
 use error::{FictResult, fict_err};
 
@@ -38,8 +38,7 @@ impl Database {
 
         let config = Default::default();
         let manager = try!(PostgresConnectionManager::new(&*pg_address, SslMode::None));
-        let error_handler = Box::new(LoggingErrorHandler);
-        let pool = try!(Pool::new(config, manager, error_handler));
+        let pool = try!(Pool::new(config, manager));
 
         try!(Database::initialize(&pool));
 
