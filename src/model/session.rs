@@ -5,7 +5,7 @@ use std::fmt::{self, Display, Formatter};
 use postgres::Connection;
 use rand::Rng;
 
-use model::{User, create_index, first, first_opt};
+use model::{User, first, first_opt};
 use error::FictResult;
 
 /// An active user of the site.

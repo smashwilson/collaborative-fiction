@@ -1,7 +1,7 @@
 use postgres::Connection;
 use time::Timespec;
 
-use model::{create_index, first, first_opt, User};
+use model::{first, first_opt, User};
 use error::{FictResult, fict_err};
 
 /// An ordered sequence of Snippets that combine to form a (hopefully) hilarious piece of fiction.
@@ -215,13 +215,13 @@ impl StoryAccess {
             )
         ", &[]));
 
-        try!(create_index(conn, "story_access_story_id_index",
-            "CREATE INDEX story_access_story_id_index ON story_access (story_id)"
-        ));
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS story_access_story_id_index ON story_access (story_id)
+        ", &[]));
 
-        try!(create_index(conn, "story_access_user_id_index",
-            "CREATE INDEX story_access_user_id_index ON story_access (user_id)"
-        ));
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS story_access_user_id_index ON story_access (user_id)
+        ", &[]));
 
         Ok(())
     }

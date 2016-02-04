@@ -4,7 +4,7 @@ use std::fmt::{self, Display, Formatter};
 
 use postgres::Connection;
 
-use model::{create_index, first};
+use model::first;
 use error::FictResult;
 
 /// Participant in the collaborative storytelling process. Automatically created on first oauth

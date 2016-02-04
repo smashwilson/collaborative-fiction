@@ -1,7 +1,7 @@
 use postgres::Connection;
 use time::Timespec;
 
-use model::{create_index, first, Story, User};
+use model::{first, Story, User};
 use error::FictResult;
 
 /// Single submission to an ongoing `Story`.
