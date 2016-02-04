@@ -6,9 +6,8 @@ use std::default::Default;
 use iron::Chain;
 use iron::typemap::Key;
 use persistent::Write;
-use postgres::{self, Connection};
 use postgres::rows::{Rows, Row};
-use r2d2::{LoggingErrorHandler, Pool};
+use r2d2::Pool;
 use r2d2_postgres::{PostgresConnectionManager, SslMode};
 
 use error::{FictResult, fict_err};
