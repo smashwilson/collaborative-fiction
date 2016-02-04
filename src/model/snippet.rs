@@ -36,13 +36,13 @@ impl Snippet {
             )
         ", &[]));
 
-        try!(create_index(conn, "snippets_user_id_index",
-            "CREATE INDEX snippets_user_id_index ON snippets (user_id)"
-        ));
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS snippets_user_id_index ON snippets (user_id)
+        ", &[]));
 
-        try!(create_index(conn, "snippets_story_id_index",
-            "CREATE INDEX snippets_story_id_index ON snippets (story_id)"
-        ));
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS snippets_story_id_index ON snippets (story_id)
+        ", &[]));
 
         Ok(())
     }

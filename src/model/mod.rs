@@ -82,29 +82,3 @@ fn first(results: Rows) -> FictResult<Row> {
     first_opt(results)
         .and_then(|r| r.ok_or(fict_err("Expected at least one result, but zero were returned")))
 }
-
-/// Create an index using the provided SQL if it doesn't already exist. This is a workaround for
-/// IF NOT EXISTS not being available in PostgreSQL until 9.5.
-fn create_index(conn: &Connection, name: &str, sql: &str) -> FictResult<()> {
-    let existing_stmt = try!(conn.prepare(
-        &format!("SELECT to_regclass('{}')::varchar", name)
-    ));
-    let existing_result = try!(existing_stmt.query(&[]));
-    let row = try!(first(existing_result));
-    let exists = match row.get_opt::<usize, String>(0) {
-        Err(postgres::error::Error::Conversion) => false,
-        Err(e) => return Err(From::from(e)),
-        _ => true,
-    };
-
-    if ! exists {
-        debug!("Creating index {}.", name);
-        match conn.execute(sql, &[]) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(From::from(e)),
-        }
-    } else {
-        debug!("Index {} already exists.", name);
-        Ok(())
-    }
-}

@@ -26,7 +26,9 @@ impl User {
             email VARCHAR NOT NULL
         )", &[]));
 
-        try!(create_index(conn, "email_index", "CREATE UNIQUE INDEX email_index ON users (email)"));
+        try!(conn.execute("
+            CREATE UNIQUE INDEX IF NOT EXISTS email_index ON users (email)
+        ", &[]));
 
         Ok(())
     }

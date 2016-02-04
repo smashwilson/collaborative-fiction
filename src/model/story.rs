@@ -41,9 +41,9 @@ impl Story {
             )
         ", &[]));
 
-        try!(create_index(conn, "stories_lock_index",
-            "CREATE INDEX stories_lock_index ON stories (lock_user_id)"
-        ));
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS stories_lock_index ON stories (lock_user_id)
+        ", &[]));
 
         Ok(())
     }

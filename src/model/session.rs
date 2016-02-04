@@ -28,8 +28,9 @@ impl Session {
             )
         ", &[]));
 
-        try!(create_index(conn, "token_index",
-            "CREATE UNIQUE INDEX token_index ON sessions (token)"));
+        try!(conn.execute("
+            CREATE UNIQUE INDEX IF NOT EXISTS token_index ON sessions (token)
+        ", &[]));
 
         Ok(())
     }
