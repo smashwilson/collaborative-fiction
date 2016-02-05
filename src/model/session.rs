@@ -5,7 +5,7 @@ use std::fmt::{self, Display, Formatter};
 use postgres::Connection;
 use rand::Rng;
 
-use model::{User, create_index, first, first_opt};
+use model::{User, first, first_opt};
 use error::FictResult;
 
 /// An active user of the site.
@@ -28,8 +28,9 @@ impl Session {
             )
         ", &[]));
 
-        try!(create_index(conn, "token_index",
-            "CREATE UNIQUE INDEX token_index ON sessions (token)"));
+        try!(conn.execute("
+            CREATE UNIQUE INDEX IF NOT EXISTS token_index ON sessions (token)
+        ", &[]));
 
         Ok(())
     }
@@ -47,7 +48,7 @@ impl Session {
             RETURNING id
         "));
         let rows = try!(insertion.query(&[&token, &user_id]));
-        let row = try!(first(rows));
+        let row = try!(first(&rows));
 
         Ok(Session{
             id: row.get(0),
@@ -66,7 +67,7 @@ impl Session {
         "));
 
         let rows = try!(selection.query(&[&token]));
-        let row_opt = try!(first_opt(rows));
+        let row_opt = try!(first_opt(&rows));
 
         Ok(row_opt.map(|row| Session{
             id: row.get(0),

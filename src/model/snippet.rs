@@ -1,7 +1,7 @@
 use postgres::Connection;
 use time::Timespec;
 
-use model::{create_index, first, Story, User};
+use model::{first, Story, User};
 use error::FictResult;
 
 /// Single submission to an ongoing `Story`.
@@ -36,13 +36,13 @@ impl Snippet {
             )
         ", &[]));
 
-        try!(create_index(conn, "snippets_user_id_index",
-            "CREATE INDEX snippets_user_id_index ON snippets (user_id)"
-        ));
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS snippets_user_id_index ON snippets (user_id)
+        ", &[]));
 
-        try!(create_index(conn, "snippets_story_id_index",
-            "CREATE INDEX snippets_story_id_index ON snippets (story_id)"
-        ));
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS snippets_story_id_index ON snippets (story_id)
+        ", &[]));
 
         Ok(())
     }
@@ -65,7 +65,7 @@ impl Snippet {
         "));
 
         let rows = try!(insertion.query(&[&contributor_id, &story.id, &content]));
-        let row = try!(first(rows));
+        let row = try!(first(&rows));
 
         Ok(Snippet{
             id: row.get(0),

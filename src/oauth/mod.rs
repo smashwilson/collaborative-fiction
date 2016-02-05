@@ -251,7 +251,7 @@ pub trait Provider : Key + Send + Sync + Clone {
 
         debug!("Attempting to acquire a {} access token from: [{}]", o.name, o.token_uri);
 
-        let mut client = Client::new();
+        let client = Client::new();
         let mut req = client.post(o.token_uri.clone()).body(b);
         req = req.header(Accept(vec![qitem(Mime(TopLevel::Application, SubLevel::Json, vec![]))]));
 

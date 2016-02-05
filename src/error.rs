@@ -69,8 +69,8 @@ impl NonFictError for std::io::Error {}
 impl NonFictError for std::env::VarError {}
 impl NonFictError for log::SetLoggerError {}
 impl NonFictError for iron::IronError {}
-impl NonFictError for postgres::Error {}
-impl NonFictError for postgres::ConnectError {}
+impl NonFictError for postgres::error::Error {}
+impl NonFictError for postgres::error::ConnectError {}
 impl NonFictError for r2d2::InitializationError {}
 impl NonFictError for r2d2::GetTimeout {}
 impl NonFictError for hyper::Error {}

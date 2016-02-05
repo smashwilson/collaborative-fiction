@@ -1,7 +1,7 @@
 use postgres::Connection;
 use time::Timespec;
 
-use model::{create_index, first, first_opt, User};
+use model::{first, first_opt, User};
 use error::{FictResult, fict_err};
 
 /// An ordered sequence of Snippets that combine to form a (hopefully) hilarious piece of fiction.
@@ -41,9 +41,9 @@ impl Story {
             )
         ", &[]));
 
-        try!(create_index(conn, "stories_lock_index",
-            "CREATE INDEX stories_lock_index ON stories (lock_user_id)"
-        ));
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS stories_lock_index ON stories (lock_user_id)
+        ", &[]));
 
         Ok(())
     }
@@ -58,7 +58,7 @@ impl Story {
         "));
 
         let rows = try!(insertion.query(&[]));
-        let row = try!(first(rows));
+        let row = try!(first(&rows));
 
         let story = Story{
             id: row.get(0),
@@ -89,7 +89,7 @@ impl Story {
         "));
 
         let rows = try!(selection.query(&[&id]));
-        let row_opt = try!(first_opt(rows));
+        let row_opt = try!(first_opt(&rows));
 
         Ok(row_opt
             .map(|row| Story{
@@ -215,13 +215,13 @@ impl StoryAccess {
             )
         ", &[]));
 
-        try!(create_index(conn, "story_access_story_id_index",
-            "CREATE INDEX story_access_story_id_index ON story_access (story_id)"
-        ));
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS story_access_story_id_index ON story_access (story_id)
+        ", &[]));
 
-        try!(create_index(conn, "story_access_user_id_index",
-            "CREATE INDEX story_access_user_id_index ON story_access (user_id)"
-        ));
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS story_access_user_id_index ON story_access (user_id)
+        ", &[]));
 
         Ok(())
     }
@@ -277,7 +277,7 @@ impl StoryAccess {
         "));
 
         let rows = try!(locate.query(&[&user.id, &story.id]));
-        let row_opt = try!(first_opt(rows));
+        let row_opt = try!(first_opt(&rows));
 
         row_opt
             .map(|row| AccessLevel::decode(row.get(0)))

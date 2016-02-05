@@ -4,7 +4,7 @@ use std::fmt::{self, Display, Formatter};
 
 use postgres::Connection;
 
-use model::{create_index, first};
+use model::first;
 use error::FictResult;
 
 /// Participant in the collaborative storytelling process. Automatically created on first oauth
@@ -26,7 +26,9 @@ impl User {
             email VARCHAR NOT NULL
         )", &[]));
 
-        try!(create_index(conn, "email_index", "CREATE UNIQUE INDEX email_index ON users (email)"));
+        try!(conn.execute("
+            CREATE UNIQUE INDEX IF NOT EXISTS email_index ON users (email)
+        ", &[]));
 
         Ok(())
     }
@@ -95,7 +97,7 @@ impl User {
         "));
 
         let rows = try!(selection.query(&[&id]));
-        let row = try!(first(rows));
+        let row = try!(first(&rows));
 
         Ok(User{
             id: Some(row.get(0)),
