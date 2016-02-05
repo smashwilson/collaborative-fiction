@@ -1,5 +1,5 @@
-use postgres::Connection;
-use time::Timespec;
+use postgres::GenericConnection;
+use chrono::{DateTime, UTC};
 
 use model::{first, Story, User};
 use error::FictResult;
@@ -10,7 +10,7 @@ pub struct Snippet {
     pub ordinal: i32,
     pub user_id: i64,
     pub story_id: i64,
-    pub creation_time: Timespec,
+    pub creation_time: DateTime<UTC>,
     pub content: String
 }
 
@@ -19,7 +19,7 @@ impl Snippet {
     /// Initialize database tables and indices used to store `Snippet` objects.
     ///
     /// Depends on `Story::initialize` and `User::initialize`.
-    pub fn initialize(conn: &Connection) -> FictResult<()> {
+    pub fn initialize(conn: &GenericConnection) -> FictResult<()> {
         try!(conn.execute("
             CREATE TABLE IF NOT EXISTS snippets (
                 id BIGSERIAL PRIMARY KEY,
@@ -48,14 +48,14 @@ impl Snippet {
     }
 
     /// Accept data to construct a `Snippet` that begins a new `Story` in draft status.
-    pub fn begin(conn: &Connection, owner: &User, content: String) -> FictResult<Snippet> {
+    pub fn begin(conn: &GenericConnection, owner: &User, content: String) -> FictResult<Snippet> {
         let story = try!(Story::begin(conn, owner));
 
         Snippet::contribute(conn, &story, owner, content)
     }
 
     /// Continue a `Story` in progress by creating a new `Snippet`.
-    pub fn contribute(conn: &Connection, story: &Story, contributor: &User, content: String) -> FictResult<Snippet> {
+    pub fn contribute(conn: &GenericConnection, story: &Story, contributor: &User, content: String) -> FictResult<Snippet> {
         let contributor_id = contributor.id.unwrap();
 
         let insertion = try!(conn.prepare("

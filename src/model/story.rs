@@ -1,8 +1,9 @@
-use postgres::Connection;
-use time::Timespec;
+use postgres::{Connection, GenericConnection};
+use chrono::{DateTime, UTC};
+use chrono::duration::Duration;
 
 use model::{first, first_opt, User};
-use error::{FictResult, fict_err};
+use error::{FictResult, FictError, fict_err};
 
 /// An ordered sequence of Snippets that combine to form a (hopefully) hilarious piece of fiction.
 pub struct Story {
@@ -10,11 +11,12 @@ pub struct Story {
     pub title: Option<String>,
     pub published: bool,
     pub world_readable: bool,
-    pub creation_time: Timespec,
-    pub update_time: Timespec,
-    pub publish_time: Option<Timespec>,
+    pub lock_duration_s: i64,
+    pub creation_time: DateTime<UTC>,
+    pub update_time: DateTime<UTC>,
+    pub publish_time: Option<DateTime<UTC>>,
     pub lock_user_id: Option<i64>,
-    pub lock_expiration: Option<Timespec>
+    pub lock_expiration: Option<DateTime<UTC>>
 }
 
 impl Story {
@@ -22,13 +24,14 @@ impl Story {
     /// Initialize database tables and indices used to story `Story` objects.
     ///
     /// Depends on `User::initialize`.
-    pub fn initialize(conn: &Connection) -> FictResult<()> {
+    pub fn initialize(conn: &GenericConnection) -> FictResult<()> {
         try!(conn.execute("
             CREATE TABLE IF NOT EXISTS stories (
                 id BIGSERIAL PRIMARY KEY,
                 title VARCHAR,
                 published BOOLEAN NOT NULL DEFAULT false,
                 world_readable BOOLEAN NOT NULL DEFAULT false,
+                lock_duration_s BIGINT NOT NULL DEFAULT 21600,
                 creation_time TIMESTAMP WITH TIME ZONE NOT NULL
                     DEFAULT (now() AT TIME ZONE 'utc'),
                 update_time TIMESTAMP WITH TIME ZONE NOT NULL
@@ -50,11 +53,13 @@ impl Story {
 
     /// Create and persist a new `Story`. The provided `User` will be granted Owner-level access
     /// to the story.
-    pub fn begin(conn: &Connection, owner: &User) -> FictResult<Story> {
+    pub fn begin(conn: &GenericConnection, owner: &User) -> FictResult<Story> {
         let insertion = try!(conn.prepare("
             INSERT INTO stories DEFAULT VALUES
-            RETURNING id, title, published, world_readable, creation_time, update_time,
-                      publish_time, lock_user_id, lock_expiration
+            RETURNING
+                id, title, published, world_readable, lock_duration_s,
+                creation_time, update_time,
+                publish_time, lock_user_id, lock_expiration
         "));
 
         let rows = try!(insertion.query(&[]));
@@ -65,11 +70,12 @@ impl Story {
             title: row.get(1),
             published: row.get(2),
             world_readable: row.get(3),
-            creation_time: row.get(4),
-            update_time: row.get(5),
-            publish_time: row.get(6),
-            lock_user_id: row.get(7),
-            lock_expiration: row.get(8)
+            lock_duration_s: row.get(4),
+            creation_time: row.get(5),
+            update_time: row.get(6),
+            publish_time: row.get(7),
+            lock_user_id: row.get(8),
+            lock_expiration: row.get(9)
         };
 
         // Automatically grant Owner access to the creating user.
@@ -78,11 +84,94 @@ impl Story {
         Ok(story)
     }
 
+    /// Search for an existing `Story` by ID. If the story does not exist, or if the current user
+    /// does not have sufficient access to write to this story, return `Err(FictError::NotFound)`.
+    /// If the story is currently locked by someone else, return `Err(FictError::LockFailure)` with
+    /// the lock details. Otherwise, return the locked `Story`.
+    pub fn locked_for_write(conn: &Connection, id: i16, applicant: &User) -> FictResult<Story> {
+        let now = UTC::now();
+        let transaction = try!(conn.transaction());
+
+        // Locate and lock the story row.
+        let selection = try!(transaction.prepare("
+            SELECT
+                id, title, published, world_readable, lock_duration_s,
+                creation_time, update_time, publish_time,
+                lock_user_id, lock_expiration
+            FROM stories
+            WHERE id = $1
+            FOR UPDATE
+        "));
+
+        let selection_rows = try!(selection.query(&[&id]));
+        let story_opt = try!(first_opt(&selection_rows)).map(|row| Story{
+            id: row.get(0),
+            title: row.get(1),
+            published: row.get(2),
+            world_readable: row.get(3),
+            lock_duration_s: row.get(4),
+            creation_time: row.get(5),
+            update_time: row.get(6),
+            publish_time: row.get(7),
+            lock_user_id: row.get(8),
+            lock_expiration: row.get(9)
+        });
+
+        // Story ID does not match a known story.
+        if story_opt.is_none() {
+            return Err(FictError::NotFound);
+        }
+        let mut story = story_opt.unwrap();
+
+        let applicant_id = try!(applicant.id.ok_or(
+            fict_err(format!("User {} must be persisted to lock a story.", applicant.name))
+        ));
+
+        // Story is currently locked by a different user with an unexpired lock.
+        let locked_by_other = story.lock_user_id.map(|owner_id| {
+            owner_id != applicant_id
+        }).unwrap_or(false);
+
+        let expiration_is_valid = story.lock_expiration.map(|exp| {
+            exp >= now
+        }).unwrap_or(false);
+
+        if locked_by_other && ! expiration_is_valid {
+            let owner = try!(User::with_id(&transaction, story.lock_user_id.unwrap()));
+
+            return Err(FictError::AlreadyLocked {
+                username: owner.name,
+                expiration: story.lock_expiration.unwrap()
+            });
+        }
+
+        // Acquire the story lock.
+        let update = try!(transaction.prepare("
+            UPDATE stories
+            SET
+                lock_user_id = $1,
+                lock_expiration = $2
+            WHERE id = $3
+        "));
+
+        let lock_expiration = now + Duration::seconds(story.lock_duration_s);
+
+        try!(update.query(&[&applicant_id, &lock_expiration, &story.id]));
+        story.lock_user_id = Some(applicant_id);
+        story.lock_expiration = Some(lock_expiration);
+
+        // Return the locked story.
+        try!(transaction.commit());
+
+        Ok(story)
+    }
+
     /// Search for an existing `Story` by ID.
-    pub fn with_id(conn: &Connection, id: i64) -> FictResult<Option<Story>> {
+    pub fn with_id(conn: &GenericConnection, id: i64) -> FictResult<Option<Story>> {
         let selection = try!(conn.prepare("
             SELECT
-                id, title, published, world_readable, creation_time, update_time, publish_time,
+                id, title, published, world_readable, lock_duration_s,
+                creation_time, update_time, publish_time,
                 lock_user_id, lock_expiration
             FROM stories
             WHERE id = $1
@@ -97,16 +186,17 @@ impl Story {
                 title: row.get(1),
                 published: row.get(2),
                 world_readable: row.get(3),
-                creation_time: row.get(4),
-                update_time: row.get(5),
-                publish_time: row.get(6),
-                lock_user_id: row.get(7),
-                lock_expiration: row.get(8)
+                lock_duration_s: row.get(4),
+                creation_time: row.get(5),
+                update_time: row.get(6),
+                publish_time: row.get(7),
+                lock_user_id: row.get(8),
+                lock_expiration: row.get(9)
             }))
     }
 
     /// Determine the level of access granted to a given `User`.
-    pub fn access_for(&self, conn: &Connection, user: &User) -> FictResult<AccessLevel> {
+    pub fn access_for(&self, conn: &GenericConnection, user: &User) -> FictResult<AccessLevel> {
         let access = try!(StoryAccess::access_for(conn, user, &self));
 
         Ok(if self.published && self.world_readable {
@@ -200,7 +290,7 @@ impl StoryAccess {
     /// Initialize database tables and indices used to store `StoryAccess` objects.
     ///
     /// Depends on `Story::initialize` and `User::initialize`.
-    pub fn initialize(conn: &Connection) -> FictResult<()> {
+    pub fn initialize(conn: &GenericConnection) -> FictResult<()> {
         try!(conn.execute("
             CREATE TABLE IF NOT EXISTS story_access (
                 id BIGSERIAL PRIMARY KEY,
@@ -228,7 +318,7 @@ impl StoryAccess {
 
     /// Grant a `User` access to a `Story` at a specified level. If level is `NoAccess`, any
     /// access will be removed.
-    pub fn grant(conn: &Connection, story: &Story, user: &User, level: &AccessLevel) -> FictResult<()> {
+    pub fn grant(conn: &GenericConnection, story: &Story, user: &User, level: &AccessLevel) -> FictResult<()> {
         match *level {
             AccessLevel::NoAccess => {
                 // Revoke any existing access instead.
@@ -269,7 +359,7 @@ impl StoryAccess {
     }
 
     /// Determine the current access level that a `User` has on a `Story`.
-    fn access_for(conn: &Connection, user: &User, story: &Story) -> FictResult<AccessLevel> {
+    fn access_for(conn: &GenericConnection, user: &User, story: &Story) -> FictResult<AccessLevel> {
         let locate = try!(conn.prepare("
             SELECT access_level_code
             FROM story_access
