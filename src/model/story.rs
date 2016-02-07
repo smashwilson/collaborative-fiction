@@ -232,6 +232,26 @@ impl Story {
         })
     }
 
+    /// Revoke the currently-held story lock, if any.
+    pub fn unlock(&self, conn: &GenericConnection) -> FictResult<()> {
+        let update = try!(conn.prepare("
+            UPDATE stories
+            SET
+                lock_user_id = NULL,
+                lock_expiration = NULL
+            WHERE
+                id = $1 AND lock_user_id = $2
+        "));
+
+        let count = try!(update.execute(&[&self.id, &self.lock_user_id]));
+
+        if count == 1 {
+            Ok(())
+        } else {
+            Err(fict_err("Unable to revoke lock"))
+        }
+    }
+
 }
 
 /// Level of access granted to a specific `User` on a `Story`.
