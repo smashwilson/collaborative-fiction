@@ -88,7 +88,7 @@ impl Story {
     /// does not have sufficient access to write to this story, return `Err(FictError::NotFound)`.
     /// If the story is currently locked by someone else, return `Err(FictError::LockFailure)` with
     /// the lock details. Otherwise, return the locked `Story`.
-    pub fn locked_for_write(conn: &Connection, id: i16, applicant: &User) -> FictResult<Story> {
+    pub fn locked_for_write(conn: &Connection, id: i64, applicant: &User) -> FictResult<Story> {
         let now = UTC::now();
         let transaction = try!(conn.transaction());
 
@@ -124,7 +124,8 @@ impl Story {
         let mut story = story_opt.unwrap();
 
         // Applicant does not have sufficient permission to lock this story.
-        if ! story.access_for(conn, applicant).grants_write() {
+        let access = try!(story.access_for(conn, applicant));
+        if ! access.grants_write() {
             return Err(FictError::NotFound);
         }
 
