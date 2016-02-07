@@ -123,6 +123,12 @@ impl Story {
         }
         let mut story = story_opt.unwrap();
 
+        // Applicant does not have sufficient permission to lock this story.
+        if ! story.access_for(conn, applicant).grants_write() {
+            return Err(FictError::NotFound);
+        }
+
+        // Applicant is not a persisted user. Caller error.
         let applicant_id = try!(applicant.id.ok_or(
             fict_err(format!("User {} must be persisted to lock a story.", applicant.name))
         ));
@@ -160,9 +166,9 @@ impl Story {
         story.lock_user_id = Some(applicant_id);
         story.lock_expiration = Some(lock_expiration);
 
-        // Return the locked story.
         try!(transaction.commit());
 
+        // Return the locked story.
         Ok(story)
     }
 
