@@ -12,6 +12,7 @@ pub struct Story {
     pub published: bool,
     pub world_readable: bool,
     pub lock_duration_s: i64,
+    pub contribution_count: i32,
     pub creation_time: DateTime<UTC>,
     pub update_time: DateTime<UTC>,
     pub publish_time: Option<DateTime<UTC>>,
@@ -32,6 +33,7 @@ impl Story {
                 published BOOLEAN NOT NULL DEFAULT false,
                 world_readable BOOLEAN NOT NULL DEFAULT false,
                 lock_duration_s BIGINT NOT NULL DEFAULT 21600,
+                contribution_count INT NOT NULL DEFAULT 0,
                 creation_time TIMESTAMP WITH TIME ZONE NOT NULL
                     DEFAULT (now() AT TIME ZONE 'utc'),
                 update_time TIMESTAMP WITH TIME ZONE NOT NULL
@@ -57,7 +59,7 @@ impl Story {
         let insertion = try!(conn.prepare("
             INSERT INTO stories DEFAULT VALUES
             RETURNING
-                id, title, published, world_readable, lock_duration_s,
+                id, title, published, world_readable, lock_duration_s, contribution_count,
                 creation_time, update_time,
                 publish_time, lock_user_id, lock_expiration
         "));
@@ -71,11 +73,12 @@ impl Story {
             published: row.get(2),
             world_readable: row.get(3),
             lock_duration_s: row.get(4),
-            creation_time: row.get(5),
-            update_time: row.get(6),
-            publish_time: row.get(7),
-            lock_user_id: row.get(8),
-            lock_expiration: row.get(9)
+            contribution_count: row.get(5),
+            creation_time: row.get(6),
+            update_time: row.get(7),
+            publish_time: row.get(8),
+            lock_user_id: row.get(9),
+            lock_expiration: row.get(10)
         };
 
         // Automatically grant Owner access to the creating user.
@@ -103,7 +106,7 @@ impl Story {
         // Locate and lock the story row.
         let selection = try!(transaction.prepare("
             SELECT
-                id, title, published, world_readable, lock_duration_s,
+                id, title, published, world_readable, lock_duration_s, contribution_count,
                 creation_time, update_time, publish_time,
                 lock_user_id, lock_expiration
             FROM stories
@@ -118,11 +121,12 @@ impl Story {
             published: row.get(2),
             world_readable: row.get(3),
             lock_duration_s: row.get(4),
-            creation_time: row.get(5),
-            update_time: row.get(6),
-            publish_time: row.get(7),
-            lock_user_id: row.get(8),
-            lock_expiration: row.get(9)
+            contribution_count: row.get(5),
+            creation_time: row.get(6),
+            update_time: row.get(7),
+            publish_time: row.get(8),
+            lock_user_id: row.get(9),
+            lock_expiration: row.get(10)
         });
 
         // Story ID does not match a known story.
@@ -196,7 +200,7 @@ impl Story {
     pub fn with_id(conn: &GenericConnection, id: i64) -> FictResult<Option<Story>> {
         let selection = try!(conn.prepare("
             SELECT
-                id, title, published, world_readable, lock_duration_s,
+                id, title, published, world_readable, lock_duration_s, contribution_count,
                 creation_time, update_time, publish_time,
                 lock_user_id, lock_expiration
             FROM stories
@@ -213,11 +217,12 @@ impl Story {
                 published: row.get(2),
                 world_readable: row.get(3),
                 lock_duration_s: row.get(4),
-                creation_time: row.get(5),
-                update_time: row.get(6),
-                publish_time: row.get(7),
-                lock_user_id: row.get(8),
-                lock_expiration: row.get(9)
+                contribution_count: row.get(5),
+                creation_time: row.get(6),
+                update_time: row.get(7),
+                publish_time: row.get(8),
+                lock_user_id: row.get(9),
+                lock_expiration: row.get(10)
             }))
     }
 
@@ -252,6 +257,36 @@ impl Story {
         }
     }
 
+    /// Persist any local changes into the database other than to the `lock_user_id` or
+    /// `lock_expiration` fields.
+    pub fn save(&self, conn: &GenericConnection) -> FictResult<()> {
+        let update = try!(conn.prepare("
+            UPDATE stories
+            SET
+                title = $2,
+                published = $3,
+                world_readable = $4,
+                lock_duration_s = $5,
+                contribution_count = $6,
+                creation_time = $7,
+                update_time = $8,
+                publish_time = $9
+            WHERE id = $1
+        "));
+
+        let count = try!(update.execute(&[
+            &self.id,
+            &self.title, &self.published, &self.world_readable, &self.lock_duration_s,
+            &self.contribution_count,
+            &self.creation_time, &self.update_time, &self.publish_time
+        ]));
+
+        if count == 1 {
+            Ok(())
+        } else {
+            Err(fict_err("Unable to update story"))
+        }
+    }
 }
 
 /// Level of access granted to a specific `User` on a `Story`.
@@ -352,11 +387,8 @@ impl StoryAccess {
         ", &[]));
 
         try!(conn.execute("
-            CREATE INDEX IF NOT EXISTS story_access_story_id_index ON story_access (story_id)
-        ", &[]));
-
-        try!(conn.execute("
-            CREATE INDEX IF NOT EXISTS story_access_user_id_index ON story_access (user_id)
+            CREATE INDEX IF NOT EXISTS story_access_story_id_index
+            ON story_access (story_id, user_id)
         ", &[]));
 
         Ok(())
@@ -418,6 +450,78 @@ impl StoryAccess {
         row_opt
             .map(|row| AccessLevel::decode(row.get(0)))
             .unwrap_or(Ok(AccessLevel::NoAccess))
+    }
+
+}
+
+/// Record when a User acquires a lock against a Story to prevent consecutive Snippets being
+/// contributed by the same User.
+pub struct ContributionAttempt;
+
+impl ContributionAttempt {
+
+    pub fn initialize(conn: &GenericConnection) -> FictResult<()> {
+        try!(conn.execute("
+            CREATE TABLE IF NOT EXISTS contribution_attempts (
+                id BIGSERIAL PRIMARY KEY,
+                story_id BIGINT NOT NULL REFERENCES stories (id)
+                    ON DELETE CASCADE
+                    ON UPDATE CASCADE,
+                user_id BIGINT NOT NULL REFERENCES users (id)
+                    ON DELETE CASCADE
+                    ON UPDATE CASCADE,
+                contribution_count INT NOT NULL,
+                UNIQUE (user_id, story_id)
+            )
+        ", &[]));
+
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS contribution_attempts_story_id_index
+            ON contribution_attempts (story_id)
+        ", &[]));
+
+        try!(conn.execute("
+            CREATE INDEX IF NOT EXISTS contribution_attempts_user_id_index
+            ON contribution_attempts (user_id)
+        ", &[]));
+
+        Ok(())
+    }
+
+    fn most_recent_attempt(conn: &GenericConnection, story: &Story, user: &User) -> FictResult<Option<i32>> {
+        let select = try!(conn.prepare("
+            SELECT contribution_count
+            FROM contribution_attempts
+            WHERE story_id = $1 AND user_id = $1
+        "));
+
+        let rows = try!(select.query(&[&story.id, &user.id]));
+        let row_opt = try!(first_opt(&rows));
+
+        Ok(row_opt.map(|row| row.get(0)))
+    }
+
+    /// Record a new contribution attempt.
+    fn record(conn: &GenericConnection, story: &Story, user: &User) -> FictResult<()> {
+        let update = try!(conn.prepare("
+            UPDATE contribution_attempts
+            SET contribution_count = $1
+            WHERE story_id = $2 AND user_id = $3
+        "));
+
+        let count = try!(update.execute(&[&story.contribution_count, &story.id, &user.id]));
+
+        if count >= 1 {
+            return Ok(());
+        }
+
+        let insert = try!(conn.prepare("
+            INSERT INTO contribution_attempts (contribution_count, story_id, user_id)
+            VALUES ($1, $2, $3)
+        "));
+        try!(insert.execute(&[&story.contribution_count, &story.id, &user.id]));
+
+        Ok(())
     }
 
 }

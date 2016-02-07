@@ -19,7 +19,7 @@ mod snippet;
 
 pub use self::user::User;
 pub use self::session::Session;
-pub use self::story::{Story, StoryAccess, AccessLevel};
+pub use self::story::{Story, StoryAccess, AccessLevel, ContributionAttempt};
 pub use self::snippet::Snippet;
 
 /// Database is the type key used to access the connection pool.
@@ -56,6 +56,7 @@ impl Database {
         try!(Session::initialize(&*conn));
         try!(Story::initialize(&*conn));
         try!(StoryAccess::initialize(&*conn));
+        try!(ContributionAttempt::initialize(&*conn));
         try!(Snippet::initialize(&*conn));
 
         Ok(())
