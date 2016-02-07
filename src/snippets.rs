@@ -60,6 +60,9 @@ pub fn post(req: &mut Request) -> IronResult<Response> {
             try!(Snippet::contribute(&*conn, &story, &u, body.snippet.content)
                 .map_err(|err| err.iron(status::InternalServerError)));
 
+            try!(story.unlock(&*conn)
+                .map_err(|err| err.iron(status::InternalServerError)));
+
             Ok(Response::with(status::Created))
         },
         None => {
