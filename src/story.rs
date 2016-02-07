@@ -2,7 +2,7 @@
 //!
 //! * `POST /story/:id/lock` - Acquire a lock on the story :id.
 
-use iron::{Request, Response, IronResult, IronError, Chain};
+use iron::{Request, Response, IronResult, Chain};
 use iron::status;
 use router::Router;
 use persistent::Write;
@@ -64,7 +64,7 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
     let pool = mutex.lock().unwrap();
     let conn = pool.get().unwrap();
 
-    match Story::locked_for_write(&*conn, story_id, &applicant) {
+    match Story::locked_for_write(&*conn, story_id, &applicant, true) {
         Ok(story) => {
             let formatted_expiration = story.lock_expiration.map(|exp| {
                 format!("{}", exp.format(TIMESTAMP_FORMAT))

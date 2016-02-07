@@ -84,11 +84,19 @@ impl Story {
         Ok(story)
     }
 
-    /// Search for an existing `Story` by ID. If the story does not exist, or if the current user
-    /// does not have sufficient access to write to this story, return `Err(FictError::NotFound)`.
+    /// Search for an existing `Story` by ID and ensure that a User holds an unexpired lock on that
+    /// story.
+    ///
+    /// If the story does not exist, or if the current user does not have sufficient access to write
+    /// to this story, return `Err(FictError::NotFound)`.
+    ///
     /// If the story is currently locked by someone else, return `Err(FictError::LockFailure)` with
-    /// the lock details. Otherwise, return the locked `Story`.
-    pub fn locked_for_write(conn: &Connection, id: i64, applicant: &User) -> FictResult<Story> {
+    /// the lock details.
+    ///
+    /// If `acquire` is `false` and the story is not locked, return `Err(FictError::Unlocked)`.
+    ///
+    /// Otherwise, atomically acquire the Story lock on behalf of the applicant User.
+    pub fn locked_for_write(conn: &Connection, id: i64, applicant: &User, acquire: bool) -> FictResult<Story> {
         let now = UTC::now();
         let transaction = try!(conn.transaction());
 
@@ -152,7 +160,18 @@ impl Story {
             });
         }
 
-        // Acquire the story lock.
+        // Story is unlocked and no lock was requested.
+        if ! acquire {
+            let locked_by_applicant = story.lock_user_id.map(|owner_id| {
+                owner_id == applicant_id
+            }).unwrap_or(false);
+
+            if ! locked_by_applicant && ! expiration_is_valid {
+                return Err(FictError::Unlocked);
+            };
+        }
+
+        // Acquire the story lock and compute a new expiration.
         let update = try!(transaction.prepare("
             UPDATE stories
             SET

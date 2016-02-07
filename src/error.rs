@@ -13,7 +13,7 @@ use iron;
 use rustc_serialize;
 use chrono::{DateTime, UTC};
 
-use error::FictError::{Message, Cause, NotFound, AlreadyLocked};
+use error::FictError::{Message, Cause, NotFound, Unlocked, AlreadyLocked};
 
 /// An Error type that can be used throughout the application. It can provide its own error message
 /// or wrap an underlying error of a different type.
@@ -23,6 +23,7 @@ pub enum FictError {
     Message(String),
     Cause(Box<Error + Send>),
     NotFound,
+    Unlocked,
     AlreadyLocked { username: String, expiration: DateTime<UTC> }
 }
 
@@ -42,16 +43,15 @@ impl Error for FictError {
             Message(ref s) => s,
             Cause(ref e) => e.description(),
             NotFound => "Resource not found",
-            AlreadyLocked {..} => "Unable to acquire a story lock"
+            Unlocked => "Resource not locked",
+            AlreadyLocked {..} => "Unable to acquire a lock"
         }
     }
 
     fn cause(&self) -> Option<&Error> {
         match *self {
-            Message(..) => None,
             Cause(ref e) => Some(&**e),
-            NotFound => None,
-            AlreadyLocked {..} => None,
+            _ => None
         }
     }
 }
@@ -59,10 +59,8 @@ impl Error for FictError {
 impl Display for FictError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
         match *self {
-            Message(ref s) => f.write_str(s),
             Cause(ref e) => Display::fmt(e, f),
-            NotFound => f.write_str(self.description()),
-            AlreadyLocked { .. } => f.write_str(self.description())
+            _ => f.write_str(self.description()),
         }
     }
 }
