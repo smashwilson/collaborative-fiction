@@ -4,14 +4,14 @@
 
 use iron::{Request, Response, IronResult, IronError, Chain};
 use iron::status;
-use router::{Router, Params};
-use persistent::{Read, Write};
+use router::Router;
+use persistent::Write;
 use plugin::Extensible;
 use rustc_serialize::json;
 
 use model::{Database, Story};
 use auth::{AuthUser, RequireUser};
-use error::FictError::{AlreadyLocked, NotFound};
+use error::FictError::AlreadyLocked;
 
 #[derive(Debug, Clone, RustcEncodable)]
 struct LockGranted<'a> {
@@ -42,6 +42,11 @@ struct LockDeniedResponse<'a> {
     lock: LockDenied<'a>
 }
 
+/// Consistent DateTime format to be used throughout the API: `Fri, 10 May 2015 17:58:28 +0000`
+const TIMESTAMP_FORMAT: &'static str = "%a, %d %b %Y %T %z";
+
+/// `POST /story/:id/lock` to acquire a lock on an existing story and retrieve the most recent
+/// contributed Snippet.
 pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
     let applicant = req.extensions().get::<AuthUser>().cloned()
         .expect("No authenticated user");
@@ -61,10 +66,14 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
 
     match Story::locked_for_write(&*conn, story_id, &applicant) {
         Ok(story) => {
+            let formatted_expiration = story.lock_expiration.map(|exp| {
+                format!("{}", exp.format(TIMESTAMP_FORMAT))
+            }).expect("Story missing expiration date");
+
             let r = LockGrantedResponse {
                 lock: LockGranted{
                     state: "granted",
-                    expires: "TODO",
+                    expires: &formatted_expiration,
                 },
                 snippet: PriorSnippet{
                     content: "TODO"
@@ -81,7 +90,7 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
                 lock: LockDenied{
                     state: "denied",
                     owner: &username,
-                    expires: "TODO"
+                    expires: &format!("{}", expiration.format(TIMESTAMP_FORMAT))
                 }
             };
 
