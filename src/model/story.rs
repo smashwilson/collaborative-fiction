@@ -359,12 +359,7 @@ impl AccessLevel {
 }
 
 /// Associates a level of access to a `Story` with a `User`.
-pub struct StoryAccess {
-    pub id: i64,
-    pub story_id: i64,
-    pub user_id: i64,
-    pub access_level: AccessLevel
-}
+pub struct StoryAccess;
 
 impl StoryAccess {
 
