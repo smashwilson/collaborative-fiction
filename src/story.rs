@@ -11,7 +11,7 @@ use rustc_serialize::json;
 
 use model::{Database, Story};
 use auth::{AuthUser, RequireUser};
-use error::FictError::AlreadyLocked;
+use error::FictError::{NotFound, Unlocked, AlreadyLocked};
 
 #[derive(Debug, Clone, RustcEncodable)]
 struct LockGranted<'a> {
@@ -106,9 +106,44 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
     }
 }
 
+/// `DELETE /story/:id/lock` to revoke a lock on a story that you currently hold.
+pub fn revoke_lock(req: &mut Request) -> IronResult<Response> {
+    let user = req.extensions().get::<AuthUser>().cloned()
+        .expect("No authenticated user");
+
+    let params = req.extensions().get::<Router>()
+        .expect("No route parameters");
+    let story_id = match params["id"].parse::<i64>() {
+        Ok(i) => i,
+        Err(_) => return Ok(Response::with(("id must be numeric", status::BadRequest)))
+    };
+
+    let mutex = req.extensions().get::<Write<Database>>()
+        .cloned()
+        .expect("No database connection available");
+    let pool = mutex.lock().unwrap();
+    let conn = pool.get().unwrap();
+
+    match Story::locked_for_write(&*conn, story_id, &user, false) {
+        Ok(story) => {
+            try!(story.unlock(&*conn)
+                .map_err(|e| e.iron(status::InternalServerError)));
+            Ok(Response::with(status::NoContent))
+        },
+        Err(e @ NotFound) => Err(e.iron(status::NotFound)),
+        Err(e @ Unlocked) => Err(e.iron(status::Forbidden)),
+        Err(e @ AlreadyLocked {..}) => Err(e.iron(status::Forbidden)),
+        Err(e) => Err(e.iron(status::InternalServerError))
+    }
+}
+
 /// Register `/story` routes and their required middleware.
 pub fn route(router: &mut Router) {
     let mut acquire_lock_chain = Chain::new(acquire_lock);
     acquire_lock_chain.link_before(RequireUser);
     router.post("/story/:id/lock", acquire_lock_chain);
+
+    let mut revoke_lock_chain = Chain::new(revoke_lock);
+    revoke_lock_chain.link_before(RequireUser);
+    router.delete("/story/:id/lock", revoke_lock_chain);
 }
