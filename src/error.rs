@@ -13,7 +13,7 @@ use iron;
 use rustc_serialize;
 use chrono::{DateTime, UTC};
 
-use error::FictError::{Message, Cause, NotFound, Unlocked, AlreadyLocked};
+use error::FictError::{Message, Cause, NotFound, Unlocked, Cooldown, AlreadyLocked};
 
 /// An Error type that can be used throughout the application. It can provide its own error message
 /// or wrap an underlying error of a different type.
@@ -24,6 +24,7 @@ pub enum FictError {
     Cause(Box<Error + Send>),
     NotFound,
     Unlocked,
+    Cooldown,
     AlreadyLocked { username: String, expiration: DateTime<UTC> }
 }
 
@@ -44,6 +45,7 @@ impl Error for FictError {
             Cause(ref e) => e.description(),
             NotFound => "Resource not found",
             Unlocked => "Resource not locked",
+            Cooldown => "Cooldown",
             AlreadyLocked {..} => "Unable to acquire a lock"
         }
     }

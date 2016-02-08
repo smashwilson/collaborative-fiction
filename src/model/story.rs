@@ -98,6 +98,9 @@ impl Story {
     ///
     /// If `acquire` is `false` and the story is not locked, return `Err(FictError::Unlocked)`.
     ///
+    /// If the applicant has locked the story for contribution before and no other User has
+    /// contributed an intervening Snippet, return `Err(FictError::Cooldown)`.
+    ///
     /// Otherwise, atomically acquire the Story lock on behalf of the applicant User.
     pub fn locked_for_write(conn: &Connection, id: i64, applicant: &User, acquire: bool) -> FictResult<Story> {
         let now = UTC::now();
@@ -173,6 +176,26 @@ impl Story {
             if ! locked_by_applicant && ! expiration_is_valid {
                 return Err(FictError::Unlocked);
             };
+        }
+
+        // Ensure that at least one Snippet has been contributed since the last time the applicant
+        // locked the Story for contribution.
+        //
+        // Permit the lock to continue if:
+        // 1. applicant has already seen this Snippet
+        //    (attempt == contribution count)
+        // OR
+        // 2. at least one other Snippet has been contributed since the last attempt
+        //    (attempt + 2 <= contribution count)
+        // OR
+        // 3. applicant has *never* locked the story (None)
+        let at_least_one_between =
+            try!(ContributionAttempt::most_recent_attempt(conn, &story, &applicant))
+            .map(|attempt| attempt == story.contribution_count || attempt + 2 <= story.contribution_count)
+            .unwrap_or(true); // No prior contributon attempts.
+
+        if ! at_least_one_between {
+            return Err(FictError::Cooldown);
         }
 
         // Acquire the story lock and compute a new expiration.
