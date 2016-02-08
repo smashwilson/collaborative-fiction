@@ -1,6 +1,6 @@
 //! Story routes.
 //!
-//! * `POST /story/:id/lock` - Acquire a lock on the story :id.
+//! * `POST /stories/:id/lock` - Acquire a lock on the story :id.
 
 use iron::{Request, Response, IronResult, Chain};
 use iron::status;
@@ -57,7 +57,7 @@ struct LockCooldownResponse<'a> {
 /// Consistent DateTime format to be used throughout the API: `Fri, 10 May 2015 17:58:28 +0000`
 const TIMESTAMP_FORMAT: &'static str = "%a, %d %b %Y %T %z";
 
-/// `POST /story/:id/lock` to acquire a lock on an existing story and retrieve the most recent
+/// `POST /stories/:id/lock` to acquire a lock on an existing story and retrieve the most recent
 /// contributed Snippet.
 pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
     let applicant = req.extensions().get::<AuthUser>().cloned()
@@ -135,7 +135,7 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
     }
 }
 
-/// `DELETE /story/:id/lock` to revoke a lock on a story that you currently hold.
+/// `DELETE /stories/:id/lock` to revoke a lock on a story that you currently hold.
 pub fn revoke_lock(req: &mut Request) -> IronResult<Response> {
     let user = req.extensions().get::<AuthUser>().cloned()
         .expect("No authenticated user");
@@ -166,13 +166,13 @@ pub fn revoke_lock(req: &mut Request) -> IronResult<Response> {
     }
 }
 
-/// Register `/story` routes and their required middleware.
+/// Register `/stories` routes and their required middleware.
 pub fn route(router: &mut Router) {
     let mut acquire_lock_chain = Chain::new(acquire_lock);
     acquire_lock_chain.link_before(RequireUser);
-    router.post("/story/:id/lock", acquire_lock_chain);
+    router.post("/stories/:id/lock", acquire_lock_chain);
 
     let mut revoke_lock_chain = Chain::new(revoke_lock);
     revoke_lock_chain.link_before(RequireUser);
-    router.delete("/story/:id/lock", revoke_lock_chain);
+    router.delete("/stories/:id/lock", revoke_lock_chain);
 }
