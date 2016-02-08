@@ -10,7 +10,7 @@ use plugin::Extensible;
 
 use model::{Database, Snippet, Story};
 use auth::{AuthUser, RequireUser};
-use error::FictError::{NotFound, Unlocked, AlreadyLocked};
+use error::FictError::{NotFound, Cooldown, Unlocked, AlreadyLocked};
 
 #[derive(Debug, Clone, RustcEncodable, RustcDecodable)]
 struct CreationBody {
@@ -47,10 +47,12 @@ pub fn post(req: &mut Request) -> IronResult<Response> {
     match body.snippet.story_id {
         Some(id) => {
             // Ensure that the current user holds an active lock on an existing Story.
-            let story = match Story::locked_for_write(&*conn, id, &u, false) {
+            let mut story = match Story::locked_for_write(&*conn, id, &u, false) {
                 Ok(s) => s,
                 Err(e @ NotFound) => return Err(e.iron(status::NotFound)),
-                Err(e @ Unlocked) | Err(e @ AlreadyLocked {..}) => return Err(e.iron(status::Forbidden)),
+                Err(e @ Unlocked) | Err(e @ AlreadyLocked {..}) | Err(e @ Cooldown) => {
+                    return Err(e.iron(status::Forbidden))
+                },
                 Err(e) => {
                     error!("Unable to lock story for snippet addition: {:?}", e);
                     return Err(e.iron(status::InternalServerError))
@@ -58,6 +60,11 @@ pub fn post(req: &mut Request) -> IronResult<Response> {
             };
 
             try!(Snippet::contribute(&*conn, &story, &u, body.snippet.content)
+                .map_err(|err| err.iron(status::InternalServerError)));
+
+            story.contribution_count += 1;
+
+            try!(story.save(&*conn)
                 .map_err(|err| err.iron(status::InternalServerError)));
 
             try!(story.unlock(&*conn)

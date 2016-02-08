@@ -9,7 +9,7 @@ use persistent::Write;
 use plugin::Extensible;
 use rustc_serialize::json;
 
-use model::{Database, Story};
+use model::{Database, Story, ContributionAttempt};
 use auth::{AuthUser, RequireUser};
 use error::FictError::{NotFound, Unlocked, AlreadyLocked};
 
@@ -66,6 +66,9 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
 
     match Story::locked_for_write(&*conn, story_id, &applicant, true) {
         Ok(story) => {
+            try!(ContributionAttempt::record(&*conn, &story, &applicant)
+                .map_err(|err| err.iron(status::InternalServerError)));
+
             let formatted_expiration = story.lock_expiration.map(|exp| {
                 format!("{}", exp.format(TIMESTAMP_FORMAT))
             }).expect("Story missing expiration date");

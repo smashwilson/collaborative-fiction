@@ -520,7 +520,7 @@ impl ContributionAttempt {
     }
 
     /// Record a new contribution attempt.
-    fn record(conn: &GenericConnection, story: &Story, user: &User) -> FictResult<()> {
+    pub fn record(conn: &GenericConnection, story: &Story, user: &User) -> FictResult<()> {
         let update = try!(conn.prepare("
             UPDATE contribution_attempts
             SET contribution_count = $1
