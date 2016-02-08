@@ -77,4 +77,27 @@ impl Snippet {
         })
     }
 
+    /// Return the most recent Snippet associated with a given Story.
+    pub fn most_recent(conn: &GenericConnection, story: &Story) -> FictResult<Snippet> {
+        let selection = try!(conn.prepare("
+            SELECT id, ordinal, user_id, story_id, creation_time, content
+            FROM snippets
+            WHERE story_id = $1
+            ORDER BY ordinal DESC
+            LIMIT 1
+        "));
+
+        let rows = try!(selection.query(&[&story.id]));
+        let row = try!(first(&rows));
+
+        Ok(Snippet{
+            id: row.get(0),
+            ordinal: row.get(1),
+            user_id: row.get(2),
+            story_id: row.get(3),
+            creation_time: row.get(4),
+            content: row.get(5)
+        })
+    }
+
 }

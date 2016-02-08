@@ -9,7 +9,7 @@ use persistent::Write;
 use plugin::Extensible;
 use rustc_serialize::json;
 
-use model::{Database, Story, ContributionAttempt};
+use model::{Database, Story, ContributionAttempt, Snippet};
 use auth::{AuthUser, RequireUser};
 use error::IntoIronResult;
 use error::FictError::{Cooldown, AlreadyLocked};
@@ -85,13 +85,15 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
                 format!("{}", exp.format(TIMESTAMP_FORMAT))
             }).expect("Story missing expiration date");
 
+            let snippet = try!(Snippet::most_recent(conn, &story).iron());
+
             let r = LockGrantedResponse {
                 lock: LockGranted{
                     state: "granted",
-                    expires: &formatted_expiration,
+                    expires: &formatted_expiration
                 },
                 snippet: PriorSnippet{
-                    content: "TODO"
+                    content: &snippet.content
                 }
             };
 
