@@ -11,7 +11,8 @@ use rustc_serialize::json;
 
 use model::{Database, Story, ContributionAttempt};
 use auth::{AuthUser, RequireUser};
-use error::FictError::{NotFound, Cooldown, Unlocked, AlreadyLocked};
+use error::IntoIronResult;
+use error::FictError::{Cooldown, AlreadyLocked};
 
 #[derive(Debug, Clone, RustcEncodable)]
 struct LockGranted<'a> {
@@ -74,12 +75,11 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
         .cloned()
         .expect("No database connection available");
     let pool = mutex.lock().unwrap();
-    let conn = pool.get().unwrap();
+    let ref conn = *pool.get().unwrap();
 
-    match Story::locked_for_write(&*conn, story_id, &applicant, true) {
+    match Story::locked_for_write(conn, story_id, &applicant, true) {
         Ok(story) => {
-            try!(ContributionAttempt::record(&*conn, &story, &applicant)
-                .map_err(|err| err.iron(status::InternalServerError)));
+            try!(ContributionAttempt::record(conn, &story, &applicant).iron());
 
             let formatted_expiration = story.lock_expiration.map(|exp| {
                 format!("{}", exp.format(TIMESTAMP_FORMAT))
@@ -130,7 +130,7 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
         },
         Err(e) => {
             warn!("Unable to lock story for write: {:?}", e);
-            Err(e.iron(status::InternalServerError))
+            Err(e.to_iron_error(status::InternalServerError))
         }
     }
 }
@@ -151,19 +151,12 @@ pub fn revoke_lock(req: &mut Request) -> IronResult<Response> {
         .cloned()
         .expect("No database connection available");
     let pool = mutex.lock().unwrap();
-    let conn = pool.get().unwrap();
+    let ref conn = *pool.get().unwrap();
 
-    match Story::locked_for_write(&*conn, story_id, &user, false) {
-        Ok(story) => {
-            try!(story.unlock(&*conn)
-                .map_err(|e| e.iron(status::InternalServerError)));
-            Ok(Response::with(status::NoContent))
-        },
-        Err(e @ NotFound) => Err(e.iron(status::NotFound)),
-        Err(e @ Unlocked) => Err(e.iron(status::Forbidden)),
-        Err(e @ AlreadyLocked {..}) => Err(e.iron(status::Forbidden)),
-        Err(e) => Err(e.iron(status::InternalServerError))
-    }
+    let story = try!(Story::locked_for_write(conn, story_id, &user, false).iron());
+    try!(story.unlock(conn).iron());
+
+    Ok(Response::with(status::NoContent))
 }
 
 /// Register `/stories` routes and their required middleware.

@@ -9,7 +9,8 @@ use log;
 use postgres;
 use r2d2;
 use hyper;
-use iron;
+use iron::status::{self, Status};
+use iron::{IronError, IronResult};
 use rustc_serialize;
 use chrono::{DateTime, UTC};
 
@@ -29,13 +30,19 @@ pub enum FictError {
 }
 
 impl FictError {
-
-    /// Consume a FictError to produce an IronError that wraps it and produces the appropriate HTTP
-    /// status code.
-    pub fn iron(self, status: iron::status::Status) -> iron::IronError {
-        iron::IronError::new(self, status)
+    /// HTTP status code that this error will generally result in.
+    pub fn preferred_status(&self) -> Status {
+        match *self {
+            NotFound => status::NotFound,
+            Unlocked | Cooldown | AlreadyLocked {..} => status::Unauthorized,
+            _ => status::InternalServerError
+        }
     }
 
+    /// Consume the error to produce an IronError with a custom HTTP status code.
+    pub fn to_iron_error(self, status: Status) -> IronError {
+        IronError::new(self, status)
+    }
 }
 
 impl Error for FictError {
@@ -77,7 +84,7 @@ trait NonFictError: Error {}
 impl NonFictError for std::io::Error {}
 impl NonFictError for std::env::VarError {}
 impl NonFictError for log::SetLoggerError {}
-impl NonFictError for iron::IronError {}
+impl NonFictError for IronError {}
 impl NonFictError for postgres::error::Error {}
 impl NonFictError for postgres::error::ConnectError {}
 impl NonFictError for r2d2::InitializationError {}
@@ -95,6 +102,25 @@ impl<E: NonFictError + Send + 'static> From<E> for FictError {
 
 /// Convenient type alias for a Result that uses FictError as its error type.
 pub type FictResult<T> = Result<T, FictError>;
+
+pub trait IntoIronResult<T> {
+    fn iron_with_status(self, status: Status) -> IronResult<T>;
+
+    fn iron(self) -> IronResult<T>;
+}
+
+impl <T> IntoIronResult<T> for FictResult<T> {
+    fn iron_with_status(self, status: Status) -> IronResult<T> {
+        self.map_err(|err| err.to_iron_error(status))
+    }
+
+    fn iron(self) -> IronResult<T> {
+        self.map_err(|err| {
+            let st = err.preferred_status();
+            err.to_iron_error(st)
+        })
+    }
+}
 
 /// Create a new FictError with the provided message.
 pub fn fict_err<S: Into<String>>(msg: S) -> FictError {
