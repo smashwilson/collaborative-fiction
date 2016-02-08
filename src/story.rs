@@ -11,7 +11,7 @@ use rustc_serialize::json;
 
 use model::{Database, Story, ContributionAttempt};
 use auth::{AuthUser, RequireUser};
-use error::FictError::{NotFound, Unlocked, AlreadyLocked};
+use error::FictError::{NotFound, Cooldown, Unlocked, AlreadyLocked};
 
 #[derive(Debug, Clone, RustcEncodable)]
 struct LockGranted<'a> {
@@ -31,15 +31,27 @@ struct LockGrantedResponse<'a> {
 }
 
 #[derive(Debug, Clone, RustcEncodable)]
-struct LockDenied<'a> {
+struct LockConflict<'a> {
     state: &'a str,
+    reason: &'a str,
     owner: &'a str,
     expires: &'a str
 }
 
 #[derive(Debug, Clone, RustcEncodable)]
-struct LockDeniedResponse<'a> {
-    lock: LockDenied<'a>
+struct LockConflictResponse<'a> {
+    lock: LockConflict<'a>
+}
+
+#[derive(Debug, Clone, RustcEncodable)]
+struct LockCooldown<'a> {
+    state: &'a str,
+    reason: &'a str
+}
+
+#[derive(Debug, Clone, RustcEncodable)]
+struct LockCooldownResponse<'a> {
+    lock: LockCooldown<'a>
 }
 
 /// Consistent DateTime format to be used throughout the API: `Fri, 10 May 2015 17:58:28 +0000`
@@ -89,11 +101,25 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
             Ok(Response::with((status::Ok, encoded)))
         },
         Err(AlreadyLocked { username, expiration }) => {
-            let r = LockDeniedResponse {
-                lock: LockDenied{
+            let r = LockConflictResponse {
+                lock: LockConflict{
                     state: "denied",
+                    reason: "conflict",
                     owner: &username,
                     expires: &format!("{}", expiration.format(TIMESTAMP_FORMAT))
+                }
+            };
+
+            let encoded = json::encode(&r)
+                .expect("Unable to encode response JSON");
+
+            Ok(Response::with((status::Conflict, encoded)))
+        },
+        Err(Cooldown) => {
+            let r = LockCooldownResponse {
+                lock: LockCooldown{
+                    state: "denied",
+                    reason: "cooldown"
                 }
             };
 
