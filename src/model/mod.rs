@@ -10,7 +10,8 @@ use postgres::rows::{Rows, Row};
 use r2d2::Pool;
 use r2d2_postgres::{PostgresConnectionManager, SslMode};
 
-use error::{FictResult, fict_err};
+use error::FictResult;
+use error::FictError::{NotFound};
 
 mod user;
 mod session;
@@ -19,7 +20,7 @@ mod snippet;
 
 pub use self::user::User;
 pub use self::session::Session;
-pub use self::story::{Story, StoryAccess, AccessLevel};
+pub use self::story::{Story, StoryAccess, AccessLevel, ContributionAttempt};
 pub use self::snippet::Snippet;
 
 /// Database is the type key used to access the connection pool.
@@ -52,11 +53,12 @@ impl Database {
 
         // Reminder to self: this order is not arbitary. It must be organized such that foreign
         // keys are applied after the table they reference is created.
-        try!(User::initialize(&conn));
-        try!(Session::initialize(&conn));
-        try!(Story::initialize(&conn));
-        try!(StoryAccess::initialize(&conn));
-        try!(Snippet::initialize(&conn));
+        try!(User::initialize(&*conn));
+        try!(Session::initialize(&*conn));
+        try!(Story::initialize(&*conn));
+        try!(StoryAccess::initialize(&*conn));
+        try!(ContributionAttempt::initialize(&*conn));
+        try!(Snippet::initialize(&*conn));
 
         Ok(())
     }
@@ -71,7 +73,7 @@ fn first_opt<'a>(results: &'a Rows) -> FictResult<Option<Row<'a>>> {
 
     match it.next() {
         None => Ok(first),
-        Some(_) => Err(fict_err("Expected only one result, but more than one were returned")),
+        Some(_) => Err(NotFound),
     }
 }
 
@@ -79,5 +81,5 @@ fn first_opt<'a>(results: &'a Rows) -> FictResult<Option<Row<'a>>> {
 /// error if zero or more than one results are returned, or if the underlying query produces any.
 fn first<'a>(results: &'a Rows) -> FictResult<Row<'a>> {
     first_opt(results)
-        .and_then(|r| r.ok_or(fict_err("Expected at least one result, but zero were returned")))
+        .and_then(|r| r.ok_or(NotFound))
 }

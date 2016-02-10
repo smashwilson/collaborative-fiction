@@ -8,8 +8,9 @@ use bodyparser;
 use plugin::Pluggable;
 use plugin::Extensible;
 
-use model::{Database, Snippet, Story};
+use model::{Database, Snippet, Story, ContributionAttempt};
 use auth::{AuthUser, RequireUser};
+use error::IntoIronResult;
 
 #[derive(Debug, Clone, RustcEncodable, RustcDecodable)]
 struct CreationBody {
@@ -37,41 +38,41 @@ pub fn post(req: &mut Request) -> IronResult<Response> {
         }
     };
 
+    debug!("POST /snippets [{}]", u.name);
+
     let mutex = req.extensions().get::<Write<Database>>()
         .cloned()
         .expect("No database connection available");
     let pool = mutex.lock().unwrap();
-    let conn = pool.get().unwrap();
+    let ref conn = *pool.get().unwrap();
 
     match body.snippet.story_id {
         Some(id) => {
-            // Append a new Snippet to an existing Story.
-            let story_opt = try!(Story::with_id(&*conn, id)
-                .map_err(|err| err.iron(status::InternalServerError)));
+            debug!(".. Into existing story id {}", id);
 
-            let story = match story_opt {
-                Some(s) => s,
-                None => return Ok(Response::with(("No such story", status::NotFound))),
-            };
+            // Ensure that the current user holds an active lock on an existing Story.
+            let mut story = try!(Story::locked_for_write(conn, id, &u, false).iron());
 
-            let access = try!(story.access_for(&*conn, &u)
-                .map_err(|err| err.iron(status::InternalServerError)));
+            try!(Snippet::contribute(conn, &story, &u, body.snippet.content).iron());
 
-            if ! access.grants_write() {
-                return Ok(Response::with(("No such story", status::NotFound)));
-            }
+            story.contribution_count += 1;
 
-            try!(Snippet::contribute(&*conn, &story, &u, body.snippet.content)
-                .map_err(|err| err.iron(status::InternalServerError)));
+            try!(story.save(conn).iron());
+            try!(story.unlock(conn).iron());
 
             Ok(Response::with(status::Created))
         },
         None => {
             // Begin a new Story belonging to the authenticated User and containing the newly
             // created Snippet.
+            debug!(".. Creating a new Story");
 
-            try!(Snippet::begin(&*conn, &u, body.snippet.content)
-                .map_err(|err| err.iron(status::InternalServerError)));
+            let (_, mut story) = try!(Snippet::begin(conn, &u, body.snippet.content).iron());
+
+            try!(ContributionAttempt::record(conn, &story, &u).iron());
+
+            story.contribution_count += 1;
+            try!(story.save(conn).iron());
 
             Ok(Response::with(status::Created))
         }

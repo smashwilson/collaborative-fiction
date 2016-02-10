@@ -16,7 +16,7 @@ extern crate postgres;
 extern crate r2d2;
 extern crate r2d2_postgres;
 extern crate plugin;
-extern crate time;
+extern crate chrono;
 
 use std::env;
 use std::process;
@@ -37,6 +37,7 @@ mod auth;
 
 mod whoami;
 mod snippets;
+mod stories;
 
 /// Respond with a simple string on `/` to be able to quickly check if it's up.
 fn health_check(_: &mut Request) -> IronResult<Response> {
@@ -65,6 +66,7 @@ fn launch() -> FictResult<()> {
     github.route(&mut router);
     whoami::route(&mut router);
     snippets::route(&mut router);
+    stories::route(&mut router);
 
     let mut chain = Chain::new(router);
     try!(Database::link(&mut chain));

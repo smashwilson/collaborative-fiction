@@ -8,18 +8,20 @@ use rustc_serialize::json;
 use auth::{AuthUser, RequireUser};
 
 #[derive(RustcEncodable)]
-struct Payload {
-    name: String,
-    email: String
+struct Payload<'a> {
+    name: &'a str,
+    email: &'a str
 }
 
 /// Generate a JSON document containing information about the current user.
 fn get(req: &mut Request) -> IronResult<Response> {
     let u = req.extensions.get::<AuthUser>().unwrap();
 
+    debug!("GET /whoami [{}]", u.name);
+
     let p = Payload{
-        name: u.name.clone(),
-        email: u.email.clone()
+        name: &u.name,
+        email: &u.email
     };
 
     let encoded = json::encode(&p).unwrap();

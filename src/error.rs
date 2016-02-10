@@ -9,10 +9,12 @@ use log;
 use postgres;
 use r2d2;
 use hyper;
-use iron;
+use iron::status::{self, Status};
+use iron::{IronError, IronResult};
 use rustc_serialize;
+use chrono::{DateTime, UTC};
 
-use error::FictError::{Message, Cause};
+use error::FictError::{Message, Cause, NotFound, Unlocked, Cooldown, AlreadyLocked};
 
 /// An Error type that can be used throughout the application. It can provide its own error message
 /// or wrap an underlying error of a different type.
@@ -21,16 +23,26 @@ use error::FictError::{Message, Cause};
 pub enum FictError {
     Message(String),
     Cause(Box<Error + Send>),
+    NotFound,
+    Unlocked,
+    Cooldown,
+    AlreadyLocked { username: String, expiration: DateTime<UTC> }
 }
 
 impl FictError {
-
-    /// Consume a FictError to produce an IronError that wraps it and produces the appropriate HTTP
-    /// status code.
-    pub fn iron(self, status: iron::status::Status) -> iron::IronError {
-        iron::IronError::new(self, status)
+    /// HTTP status code that this error will generally result in.
+    pub fn preferred_status(&self) -> Status {
+        match *self {
+            NotFound => status::NotFound,
+            Unlocked | Cooldown | AlreadyLocked {..} => status::Unauthorized,
+            _ => status::InternalServerError
+        }
     }
 
+    /// Consume the error to produce an IronError with a custom HTTP status code.
+    pub fn to_iron_error(self, status: Status) -> IronError {
+        IronError::new(self, status)
+    }
 }
 
 impl Error for FictError {
@@ -38,13 +50,17 @@ impl Error for FictError {
         match *self {
             Message(ref s) => s,
             Cause(ref e) => e.description(),
+            NotFound => "Resource not found",
+            Unlocked => "Resource not locked",
+            Cooldown => "Last contribution too recent",
+            AlreadyLocked {..} => "Unable to acquire a lock"
         }
     }
 
     fn cause(&self) -> Option<&Error> {
         match *self {
-            Message(..) => None,
             Cause(ref e) => Some(&**e),
+            _ => None
         }
     }
 }
@@ -52,8 +68,8 @@ impl Error for FictError {
 impl Display for FictError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
         match *self {
-            Message(ref s) => f.write_str(s),
             Cause(ref e) => Display::fmt(e, f),
+            _ => f.write_str(self.description()),
         }
     }
 }
@@ -68,7 +84,7 @@ trait NonFictError: Error {}
 impl NonFictError for std::io::Error {}
 impl NonFictError for std::env::VarError {}
 impl NonFictError for log::SetLoggerError {}
-impl NonFictError for iron::IronError {}
+impl NonFictError for IronError {}
 impl NonFictError for postgres::error::Error {}
 impl NonFictError for postgres::error::ConnectError {}
 impl NonFictError for r2d2::InitializationError {}
@@ -86,6 +102,40 @@ impl<E: NonFictError + Send + 'static> From<E> for FictError {
 
 /// Convenient type alias for a Result that uses FictError as its error type.
 pub type FictResult<T> = Result<T, FictError>;
+
+pub trait IntoIronResult<T> {
+    fn iron_with_status(self, status: Status) -> IronResult<T>;
+
+    fn iron(self) -> IronResult<T>;
+}
+
+impl <T> IntoIronResult<T> for FictResult<T> {
+    fn iron_with_status(self, status: Status) -> IronResult<T> {
+        self.map_err(|err| {
+            if status.is_server_error() {
+                error!("{} server error: {:?}", status, err);
+            } else {
+                info!("{} client error: {:?}", status, err);
+            }
+
+            err.to_iron_error(status)
+        })
+    }
+
+    fn iron(self) -> IronResult<T> {
+        self.map_err(|err| {
+            let st = err.preferred_status();
+
+            if st.is_server_error() {
+                error!("{} server error: {:?}", st, err);
+            } else {
+                info!("{} client error: {:?}", st, err);
+            }
+
+            err.to_iron_error(st)
+        })
+    }
+}
 
 /// Create a new FictError with the provided message.
 pub fn fict_err<S: Into<String>>(msg: S) -> FictError {
