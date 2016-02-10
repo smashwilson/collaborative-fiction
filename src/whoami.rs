@@ -17,6 +17,8 @@ struct Payload<'a> {
 fn get(req: &mut Request) -> IronResult<Response> {
     let u = req.extensions.get::<AuthUser>().unwrap();
 
+    debug!("GET /whoami [{}]", u.name);
+
     let p = Payload{
         name: &u.name,
         email: &u.email

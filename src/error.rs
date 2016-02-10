@@ -111,12 +111,27 @@ pub trait IntoIronResult<T> {
 
 impl <T> IntoIronResult<T> for FictResult<T> {
     fn iron_with_status(self, status: Status) -> IronResult<T> {
-        self.map_err(|err| err.to_iron_error(status))
+        self.map_err(|err| {
+            if status.is_server_error() {
+                error!("{} server error: {:?}", status, err);
+            } else {
+                info!("{} client error: {:?}", status, err);
+            }
+
+            err.to_iron_error(status)
+        })
     }
 
     fn iron(self) -> IronResult<T> {
         self.map_err(|err| {
             let st = err.preferred_status();
+
+            if st.is_server_error() {
+                error!("{} server error: {:?}", st, err);
+            } else {
+                info!("{} client error: {:?}", st, err);
+            }
+
             err.to_iron_error(st)
         })
     }

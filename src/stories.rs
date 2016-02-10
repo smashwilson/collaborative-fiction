@@ -71,6 +71,8 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
         Err(_) => return Ok(Response::with(("id must be numeric", status::BadRequest)))
     };
 
+    debug!("POST /stories/{}/lock [{}]", story_id, applicant.name);
+
     let mutex = req.extensions().get::<Write<Database>>()
         .cloned()
         .expect("No database connection available");
@@ -79,6 +81,8 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
 
     match Story::locked_for_write(conn, story_id, &applicant, true) {
         Ok(story) => {
+            debug!(".. Lock granted until {:?}.", story.lock_expiration);
+
             try!(ContributionAttempt::record(conn, &story, &applicant).iron());
 
             let formatted_expiration = story.lock_expiration.map(|exp| {
@@ -103,6 +107,8 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
             Ok(Response::with((status::Ok, encoded)))
         },
         Err(AlreadyLocked { username, expiration }) => {
+            debug!(".. Lock denied: already held by {}.", username);
+
             let r = LockConflictResponse {
                 lock: LockConflict{
                     state: "denied",
@@ -118,6 +124,8 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
             Ok(Response::with((status::Conflict, encoded)))
         },
         Err(Cooldown) => {
+            debug!(".. Lock denied: last contribution too recent.");
+
             let r = LockCooldownResponse {
                 lock: LockCooldown{
                     state: "denied",
@@ -131,7 +139,7 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
             Ok(Response::with((status::Conflict, encoded)))
         },
         Err(e) => {
-            warn!("Unable to lock story for write: {:?}", e);
+            error!("Unable to lock story for write: {:?}", e);
             Err(e.to_iron_error(status::InternalServerError))
         }
     }
@@ -149,6 +157,8 @@ pub fn revoke_lock(req: &mut Request) -> IronResult<Response> {
         Err(_) => return Ok(Response::with(("id must be numeric", status::BadRequest)))
     };
 
+    debug!("DELETE /stories/{}/lock [{}]", story_id, user.name);
+
     let mutex = req.extensions().get::<Write<Database>>()
         .cloned()
         .expect("No database connection available");
@@ -157,6 +167,8 @@ pub fn revoke_lock(req: &mut Request) -> IronResult<Response> {
 
     let story = try!(Story::locked_for_write(conn, story_id, &user, false).iron());
     try!(story.unlock(conn).iron());
+
+    debug!(".. Lock revoked succesfully.");
 
     Ok(Response::with(status::NoContent))
 }

@@ -38,6 +38,8 @@ pub fn post(req: &mut Request) -> IronResult<Response> {
         }
     };
 
+    debug!("POST /snippets [{}]", u.name);
+
     let mutex = req.extensions().get::<Write<Database>>()
         .cloned()
         .expect("No database connection available");
@@ -46,6 +48,8 @@ pub fn post(req: &mut Request) -> IronResult<Response> {
 
     match body.snippet.story_id {
         Some(id) => {
+            debug!(".. Into existing story id {}", id);
+
             // Ensure that the current user holds an active lock on an existing Story.
             let mut story = try!(Story::locked_for_write(conn, id, &u, false).iron());
 
@@ -61,6 +65,7 @@ pub fn post(req: &mut Request) -> IronResult<Response> {
         None => {
             // Begin a new Story belonging to the authenticated User and containing the newly
             // created Snippet.
+            debug!(".. Creating a new Story");
 
             try!(Snippet::begin(conn, &u, body.snippet.content).iron());
 
