@@ -129,7 +129,7 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
             let r = LockCooldownResponse {
                 lock: LockCooldown{
                     state: "denied",
-                    reason: "cooldown"
+                    reason: "last contribution too recent"
                 }
             };
 

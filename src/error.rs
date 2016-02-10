@@ -52,7 +52,7 @@ impl Error for FictError {
             Cause(ref e) => e.description(),
             NotFound => "Resource not found",
             Unlocked => "Resource not locked",
-            Cooldown => "Cooldown",
+            Cooldown => "Last contribution too recent",
             AlreadyLocked {..} => "Unable to acquire a lock"
         }
     }
