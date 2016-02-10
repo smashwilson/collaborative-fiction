@@ -55,16 +55,17 @@ impl Story {
 
     /// Create and persist a new `Story`. The provided `User` will be granted Owner-level access
     /// to the story.
-    pub fn begin(conn: &GenericConnection, owner: &User) -> FictResult<Story> {
+    pub fn begin(conn: &GenericConnection, owner: &User, contribution_count: i32) -> FictResult<Story> {
         let insertion = try!(conn.prepare("
-            INSERT INTO stories DEFAULT VALUES
+            INSERT INTO stories (contribution_count)
+            VALUES ($1)
             RETURNING
                 id, title, published, world_readable, lock_duration_s, contribution_count,
                 creation_time, update_time,
                 publish_time, lock_user_id, lock_expiration
         "));
 
-        let rows = try!(insertion.query(&[]));
+        let rows = try!(insertion.query(&[&contribution_count]));
         let row = try!(first(&rows));
 
         let story = Story{

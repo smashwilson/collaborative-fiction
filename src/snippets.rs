@@ -8,7 +8,7 @@ use bodyparser;
 use plugin::Pluggable;
 use plugin::Extensible;
 
-use model::{Database, Snippet, Story};
+use model::{Database, Snippet, Story, ContributionAttempt};
 use auth::{AuthUser, RequireUser};
 use error::IntoIronResult;
 
@@ -67,7 +67,9 @@ pub fn post(req: &mut Request) -> IronResult<Response> {
             // created Snippet.
             debug!(".. Creating a new Story");
 
-            try!(Snippet::begin(conn, &u, body.snippet.content).iron());
+            let (_, story) = try!(Snippet::begin(conn, &u, body.snippet.content).iron());
+
+            try!(ContributionAttempt::record(conn, &story, &u).iron());
 
             Ok(Response::with(status::Created))
         }
