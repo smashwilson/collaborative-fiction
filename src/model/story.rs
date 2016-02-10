@@ -159,7 +159,7 @@ impl Story {
             exp >= now
         }).unwrap_or(false);
 
-        if locked_by_other && ! expiration_is_valid {
+        if locked_by_other && expiration_is_valid {
             let owner = try!(User::with_id(&transaction, story.lock_user_id.unwrap()));
 
             return Err(FictError::AlreadyLocked {
