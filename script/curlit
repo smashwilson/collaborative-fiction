@@ -1,0 +1,24 @@
+#!/bin/sh
+
+[ -z "${TOKEN}" ] && {
+  echo "curlit: set your session token with 'export TOKEN=...'" >&2
+  exit 1
+}
+
+P=${1:-/}
+[ -n "$1" ] && shift
+
+METHOD=${1:-GET}
+[ -n "$1" ] && shift
+
+ARG=${ARG:-"-s"}
+
+curl \
+  ${ARG} \
+  -u "x:${TOKEN}" \
+  -X ${METHOD} \
+  -H 'Content-type: application/json' \
+  -H 'Accept: application/json' \
+  http://localhost:3000${P} "$@"
+
+echo
