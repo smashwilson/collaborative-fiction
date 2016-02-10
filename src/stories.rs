@@ -107,7 +107,7 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
             Ok(Response::with((status::Ok, encoded)))
         },
         Err(AlreadyLocked { username, expiration }) => {
-            debug!(".. Lock denied: already held by {}.", username);
+            debug!(".. Lock denied: already held by [{}].", username);
 
             let r = LockConflictResponse {
                 lock: LockConflict{
