@@ -5,11 +5,11 @@
   exit 1
 }
 
-P=${1:-/}
-[ -n "$1" ] && shift
-
 METHOD=${1:-GET}
-[ -n "$1" ] && shift
+shift
+
+P=${1:-"/"}
+shift
 
 ARG=${ARG:-"-s"}
 
