@@ -67,9 +67,12 @@ pub fn post(req: &mut Request) -> IronResult<Response> {
             // created Snippet.
             debug!(".. Creating a new Story");
 
-            let (_, story) = try!(Snippet::begin(conn, &u, body.snippet.content).iron());
+            let (_, mut story) = try!(Snippet::begin(conn, &u, body.snippet.content).iron());
 
             try!(ContributionAttempt::record(conn, &story, &u).iron());
+
+            story.contribution_count += 1;
+            try!(story.save(conn).iron());
 
             Ok(Response::with(status::Created))
         }

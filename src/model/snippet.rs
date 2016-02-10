@@ -49,7 +49,7 @@ impl Snippet {
 
     /// Accept data to construct a `Snippet` that begins a new `Story` in draft status.
     pub fn begin(conn: &GenericConnection, owner: &User, content: String) -> FictResult<(Snippet, Story)> {
-        let story = try!(Story::begin(conn, owner, 1));
+        let story = try!(Story::begin(conn, owner));
 
         Snippet::contribute(conn, &story, owner, content)
             .map(|snippet| (snippet, story))
