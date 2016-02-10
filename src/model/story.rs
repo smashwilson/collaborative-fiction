@@ -510,7 +510,7 @@ impl ContributionAttempt {
         let select = try!(conn.prepare("
             SELECT contribution_count
             FROM contribution_attempts
-            WHERE story_id = $1 AND user_id = $1
+            WHERE story_id = $1 AND user_id = $2
         "));
 
         let rows = try!(select.query(&[&story.id, &user.id]));
