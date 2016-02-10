@@ -12,7 +12,7 @@ use rustc_serialize::json;
 use model::{Database, Story, ContributionAttempt, Snippet};
 use auth::{AuthUser, RequireUser};
 use error::IntoIronResult;
-use error::FictError::{Cooldown, AlreadyLocked};
+use error::FictError::{Cooldown, AlreadyLocked, NotFound};
 
 #[derive(Debug, Clone, RustcEncodable)]
 struct LockGranted<'a> {
@@ -137,6 +137,11 @@ pub fn acquire_lock(req: &mut Request) -> IronResult<Response> {
                 .expect("Unable to encode response JSON");
 
             Ok(Response::with((status::Conflict, encoded)))
+        },
+        Err(NotFound) => {
+            debug!(".. Story not found or permission denied");
+
+            Ok(Response::with((status::NotFound, "Story not found")))
         },
         Err(e) => {
             error!("Unable to lock story for write: {:?}", e);
